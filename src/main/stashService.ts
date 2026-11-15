@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session } from 'electron'
+import { app } from 'electron'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -12,7 +12,6 @@ import type {
 import type { ConfigStore } from './config'
 import type { PoeApiClient } from './poeApi'
 
-const AUTH_PARTITION = 'persist:poe-auth'
 const MAX_STORED_SNAPSHOTS = 100
 
 interface CharacterWindowStashResponse {
@@ -31,7 +30,6 @@ interface CharacterWindowStashResponse {
 export class StashService {
   private readonly snapshotsPath: string
   private snapshots: StashSnapshot[] = []
-  private loginWin: BrowserWindow | null = null
 
   constructor (
     private readonly configStore: ConfigStore,
@@ -51,82 +49,23 @@ export class StashService {
     }
   }
 
-  async loginWithWindow (): Promise<StashAuthStatus> {
-    if (this.loginWin && !this.loginWin.isDestroyed()) {
-      this.loginWin.focus()
-      return this.getAuthStatus()
+  async setSession (poeSessId: string, accountName?: string): Promise<StashAuthStatus> {
+    const cleanSess = poeSessId.trim()
+    if (!cleanSess) {
+      throw new Error('POESESSID cannot be empty.')
     }
-
-    const authSession = session.fromPartition(AUTH_PARTITION)
-    await authSession.clearStorageData({ storages: ['cookies'] })
-
-    return new Promise<StashAuthStatus>((resolve) => {
-      let settled = false
-      const finish = (status: StashAuthStatus): void => {
-        if (settled) return
-        settled = true
-        if (this.loginWin && !this.loginWin.isDestroyed()) {
-          this.loginWin.close()
-        }
-        this.loginWin = null
-        resolve(status)
-      }
-
-      const win = new BrowserWindow({
-        width: 520,
-        height: 700,
-        title: 'Sign in to Path of Exile',
-        autoHideMenuBar: true,
-        webPreferences: {
-          partition: AUTH_PARTITION,
-          contextIsolation: true,
-          nodeIntegration: false
-        }
-      })
-      this.loginWin = win
-
-      const tryCaptureSession = async (currentUrl: string): Promise<void> => {
-        if (settled) return
-        if (!currentUrl.includes('pathofexile.com') || currentUrl.includes('/login')) {
-          return
-        }
-        const cookies = await authSession.cookies.get({
-          domain: 'pathofexile.com',
-          name: 'POESESSID'
-        })
-        const sessCookie = cookies.find((c) => c.value && c.value.length > 10)
-        if (!sessCookie) return
-
-        this.configStore.save({ poeSessId: sessCookie.value })
-        const accountName = await this.resolveAccountName().catch(() => '')
-        if (accountName) {
-          this.configStore.save({ accountName })
-        }
-        finish(this.getAuthStatus())
-      }
-
-      win.webContents.on('did-navigate', (_e, url) => {
-        void tryCaptureSession(url)
-      })
-      win.webContents.on('did-redirect-navigation', (_e, url) => {
-        void tryCaptureSession(url)
-      })
-      win.on('closed', () => {
-        this.loginWin = null
-        if (!settled) {
-          settled = true
-          resolve(this.getAuthStatus())
-        }
-      })
-
-      void win.loadURL('https://www.pathofexile.com/login')
+    this.configStore.save({
+      poeSessId: cleanSess,
+      ...(accountName !== undefined ? { accountName: accountName.trim() } : {})
     })
+    if (!accountName?.trim()) {
+      await this.resolveAccountName().catch(() => '')
+    }
+    return this.getAuthStatus()
   }
 
   async logout (): Promise<StashAuthStatus> {
     this.configStore.save({ poeSessId: '', accountName: '' })
-    const authSession = session.fromPartition(AUTH_PARTITION)
-    await authSession.clearStorageData({ storages: ['cookies'] }).catch(() => undefined)
     return this.getAuthStatus()
   }
 

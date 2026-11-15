@@ -37,6 +37,9 @@ const baselineSnapshotId = ref<string>('')
 const compareSnapshotId = ref<string>('')
 
 const busyAuth = ref(false)
+const showAuthBox = ref(false)
+const authSessInput = ref('')
+const authAccountInput = ref('')
 const busyTabs = ref(false)
 const busySnap = ref(false)
 const statusText = ref('')
@@ -117,21 +120,33 @@ async function loadInitial (): Promise<void> {
   }
 }
 
-async function signIn (): Promise<void> {
+function openBrowserSignIn (): void {
+  errorText.value = ''
+  window.poeCheck.openExternal('https://www.pathofexile.com/login')
+  showAuthBox.value = true
+  authSessInput.value = draft.value.poeSessId || ''
+  authAccountInput.value = draft.value.accountName || ''
+  statusText.value = 'Browser opened. Copy POESESSID from DevTools -> Application -> Cookies and paste below.'
+}
+
+async function submitSession (): Promise<void> {
+  if (!authSessInput.value.trim()) {
+    errorText.value = 'Paste POESESSID first.'
+    return
+  }
   busyAuth.value = true
   errorText.value = ''
-  statusText.value = 'Opening Path of Exile sign-in...'
   try {
-    auth.value = await window.poeCheck.stashAuthLogin()
-    if (auth.value.authenticated) {
-      statusText.value = auth.value.accountName
-        ? `Signed in as ${auth.value.accountName}`
-        : 'Signed in'
-      draft.value = await window.poeCheck.getConfig()
-      await loadTabs(true)
-    } else {
-      statusText.value = 'Sign-in cancelled'
-    }
+    auth.value = await window.poeCheck.stashAuthLogin(
+      authSessInput.value.trim(),
+      authAccountInput.value.trim() || undefined
+    )
+    draft.value = await window.poeCheck.getConfig()
+    showAuthBox.value = false
+    statusText.value = auth.value.accountName
+      ? `Signed in as ${auth.value.accountName}`
+      : 'Session saved'
+    await loadTabs(true)
   } catch (err) {
     errorText.value = err instanceof Error ? err.message : 'Sign-in failed'
   } finally {
@@ -317,8 +332,8 @@ onMounted(() => {
           </span>
           <button class="ws-btn" :disabled="busyAuth" @click="signOut">Sign out</button>
         </template>
-        <button v-else class="ws-btn ws-btn-accent" :disabled="busyAuth" @click="signIn">
-          {{ busyAuth ? 'Signing in...' : 'Sign in (PoE)' }}
+        <button v-else class="ws-btn ws-btn-accent" :disabled="busyAuth" @click="openBrowserSignIn">
+          Sign in (PoE)
         </button>
 
         <button class="ws-btn" @click="emit('refresh-cache')">Refresh Ninja</button>
@@ -361,6 +376,31 @@ onMounted(() => {
     <!-- Status / Error banner -->
     <div v-if="errorText" class="ws-banner ws-banner-error">{{ errorText }}</div>
     <div v-else-if="statusText" class="ws-banner ws-banner-info">{{ statusText }}</div>
+
+    <!-- Browser POESESSID Paste Bar -->
+    <div v-if="showAuthBox" class="ws-auth-box">
+      <div class="ws-auth-hint">
+        1. Sign in at pathofexile.com in your browser. 2. Open DevTools (F12) &gt; Application &gt; Cookies &gt; POESESSID. 3. Paste below:
+      </div>
+      <div class="ws-auth-row">
+        <input
+          v-model="authSessInput"
+          type="password"
+          class="ws-input ws-auth-sess"
+          placeholder="Paste POESESSID..."
+        />
+        <input
+          v-model="authAccountInput"
+          type="text"
+          class="ws-input"
+          placeholder="Account Name (optional)"
+        />
+        <button class="ws-btn ws-btn-accent" :disabled="busyAuth" @click="submitSession">
+          {{ busyAuth ? 'Connecting...' : 'Connect' }}
+        </button>
+        <button class="ws-btn" @click="showAuthBox = false">Cancel</button>
+      </div>
+    </div>
 
     <!-- Main Body -->
     <main class="ws-body">

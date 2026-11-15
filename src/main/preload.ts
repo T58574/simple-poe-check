@@ -21,7 +21,7 @@ export interface PoeCheckApi {
   saveConfig: (partial: Partial<AppConfig>) => Promise<AppConfig>
   getLeagues: () => Promise<string[]>
   refreshCache: () => Promise<void>
-  stashAuthLogin: () => Promise<StashAuthStatus>
+  stashAuthLogin: (poeSessId: string, accountName?: string) => Promise<StashAuthStatus>
   stashAuthLogout: () => Promise<StashAuthStatus>
   stashAuthStatus: () => Promise<StashAuthStatus>
   stashGetTabs: () => Promise<StashTabInfo[]>
@@ -53,7 +53,8 @@ const api: PoeCheckApi = {
   saveConfig: (partial) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, partial),
   getLeagues: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LEAGUES),
   refreshCache: () => ipcRenderer.invoke(IPC_CHANNELS.REFRESH_CACHE),
-  stashAuthLogin: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_LOGIN),
+  stashAuthLogin: (poeSessId, accountName) =>
+    ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_LOGIN, { poeSessId, accountName }),
   stashAuthLogout: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_LOGOUT),
   stashAuthStatus: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_STATUS),
   stashGetTabs: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_GET_TABS),

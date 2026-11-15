@@ -103,7 +103,11 @@ async function main (): Promise<void> {
     ])
   })
   ipcMain.handle(IPC_CHANNELS.SEARCH_TRADE, (_e, req: TradeSearchRequest) => poeApi.searchTrade(req))
-  ipcMain.handle(IPC_CHANNELS.STASH_AUTH_LOGIN, () => stashService.loginWithWindow())
+  ipcMain.handle(
+    IPC_CHANNELS.STASH_AUTH_LOGIN,
+    (_e, payload: { poeSessId: string; accountName?: string }) =>
+      stashService.setSession(payload.poeSessId, payload.accountName)
+  )
   ipcMain.handle(IPC_CHANNELS.STASH_AUTH_LOGOUT, () => stashService.logout())
   ipcMain.handle(IPC_CHANNELS.STASH_AUTH_STATUS, () => stashService.getAuthStatus())
   ipcMain.handle(IPC_CHANNELS.STASH_GET_TABS, () => stashService.getStashTabs())
