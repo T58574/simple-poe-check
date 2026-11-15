@@ -9,7 +9,7 @@ function normalizeStatKey (text: string): string {
 }
 
 function stripLocalSuffix (key: string): string {
-  return key.replace(/\s*\(local\)$/i, '').trim()
+  return key.replace(/\s*\(local\)/gi, '').replace(/\s+/g, ' ').trim()
 }
 
 interface IndexedStat {
@@ -29,16 +29,17 @@ export function getModPrimaryValue (values: number[]): number | undefined {
   return values[0]
 }
 
-export function calcDefaultMinFilter (values: number[], ratio = 0.85): number | undefined {
+export function calcDefaultMinFilter (values: number[], ratio?: number, tier?: number): number | undefined {
   const val = getModPrimaryValue(values)
   if (val === undefined) return undefined
+  const effectiveRatio = ratio ?? (tier === 1 ? 0.94 : tier === 2 ? 0.91 : 0.88)
   if (val < 0) {
-    return Math.floor(val * (2 - ratio))
+    return Math.floor(val * (2 - effectiveRatio))
   }
   if (val > 0 && val < 10 && !Number.isInteger(val)) {
-    return Number((val * ratio).toFixed(1))
+    return Number((val * effectiveRatio).toFixed(1))
   }
-  return Math.floor(val * ratio)
+  return Math.floor(val * effectiveRatio)
 }
 
 export class StatMatcher {
