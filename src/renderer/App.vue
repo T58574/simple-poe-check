@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { DEFAULT_CONFIG, type AppConfig, type PriceCheckResult } from '@shared/types'
+import {
+  DEFAULT_CONFIG,
+  type AppConfig,
+  type OverlayStatePayload,
+  type PriceCheckResult
+} from '@shared/types'
 
+const overlayVisible = ref(false)
+const overlayMode = ref<'price-check' | 'settings'>('price-check')
+const posX = ref(40)
+const posY = ref(40)
 const loading = ref(false)
 const result = ref<PriceCheckResult | null>(null)
 const showSettings = ref(false)
@@ -12,10 +21,23 @@ const statusMessage = ref('')
 
 let unsubResult: (() => void) | null = null
 let unsubLoading: (() => void) | null = null
+let unsubOverlay: (() => void) | null = null
 
 const rarityClass = computed(() =>
   result.value ? `rarity-${result.value.item.rarity}` : ''
 )
+
+const cardStyle = computed(() => {
+  if (overlayMode.value === 'settings' || showSettings.value) {
+    return {}
+  }
+  return {
+    left: `${posX.value}px`,
+    top: `${posY.value}px`,
+    width: `${config.value.overlayWidth}px`,
+    maxHeight: `${config.value.overlayMaxHeight}px`
+  }
+})
 
 function syncEnabledMods (res: PriceCheckResult): void {
   const next = new Set<string>()
@@ -60,8 +82,8 @@ async function runCustomTradeSearch (): Promise<void> {
   }
 }
 
-async function openSettings (): Promise<void> {
-  showSettings.value = !showSettings.value
+async function openSettings (forceOpen?: boolean): Promise<void> {
+  showSettings.value = forceOpen !== undefined ? forceOpen : !showSettings.value
   if (showSettings.value) {
     try {
       const fetched = await window.poeCheck.getLeagues()
@@ -95,6 +117,17 @@ function hide (): void {
 
 onMounted(async () => {
   config.value = await window.poeCheck.getConfig()
+  unsubOverlay = window.poeCheck.onOverlayState((state: OverlayStatePayload) => {
+    overlayVisible.value = state.visible
+    if (state.mode) overlayMode.value = state.mode
+    if (state.mode === 'settings') {
+      void openSettings(true)
+    } else if (state.mode === 'price-check') {
+      showSettings.value = false
+    }
+    if (state.x !== undefined) posX.value = state.x
+    if (state.y !== undefined) posY.value = state.y
+  })
   unsubLoading = window.poeCheck.onPriceCheckLoading((isLoading) => {
     loading.value = isLoading
     if (isLoading) showSettings.value = false
@@ -106,13 +139,19 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  unsubOverlay?.()
   unsubResult?.()
   unsubLoading?.()
 })
 </script>
 
 <template>
-  <div class="card">
+  <div v-if="overlayVisible" class="backdrop" @click.self="hide">
+    <div
+      class="card"
+      :class="{ centered: overlayMode === 'settings' || showSettings }"
+      :style="cardStyle"
+    >
     <header class="topbar">
       <div class="title-block">
         <div v-if="showSettings" class="item-name">Settings</div>
@@ -128,7 +167,7 @@ onUnmounted(() => {
       </div>
 
       <div class="actions">
-        <button @click="openSettings">{{ showSettings ? 'Back' : 'Settings' }}</button>
+        <button @click="openSettings()">{{ showSettings ? 'Back' : 'Settings' }}</button>
         <button @click="hide">✕</button>
       </div>
     </header>
@@ -227,5 +266,6 @@ onUnmounted(() => {
         Press <b>{{ config.hideoutHotkey }}</b> for /hideout.
       </div>
     </main>
+    </div>
   </div>
 </template>

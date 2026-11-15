@@ -1,6 +1,7 @@
 import { BrowserWindow, screen } from 'electron'
-import { OverlayController } from 'electron-overlay-window'
+import { OVERLAY_WINDOW_OPTS, OverlayController } from 'electron-overlay-window'
 import path from 'node:path'
+import { IPC_CHANNELS, type OverlayStatePayload } from '../shared/types'
 
 export class OverlayWindowManager {
   private win: BrowserWindow | null = null
@@ -18,14 +19,9 @@ export class OverlayWindowManager {
 
   create (gameTitle: string, devServerUrl?: string): BrowserWindow {
     this.win = new BrowserWindow({
-      width: 440,
-      height: 580,
-      transparent: true,
-      frame: false,
-      resizable: false,
-      skipTaskbar: true,
-      show: false,
-      alwaysOnTop: true,
+      ...OVERLAY_WINDOW_OPTS,
+      width: 800,
+      height: 600,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
@@ -39,11 +35,20 @@ export class OverlayWindowManager {
       void this.win.loadFile(path.join(__dirname, '../dist-renderer/index.html'))
     }
 
-    this.win.setIgnoreMouseEvents(true, { forward: true })
+    this.win.webContents.on('before-input-event', (event, input) => {
+      if (input.type === 'keyDown' && input.key === 'Escape' && this.overlayVisible) {
+        event.preventDefault()
+        process.nextTick(() => this.hide())
+      }
+    })
 
     if (!this.attached) {
       OverlayController.events.on('focus', () => {
         this.gameActive = true
+        if (this.overlayVisible) {
+          this.overlayVisible = false
+          this.sendState({ visible: false })
+        }
       })
       OverlayController.events.on('blur', () => {
         this.gameActive = false
@@ -58,37 +63,58 @@ export class OverlayWindowManager {
   showAtCursor (width: number, height: number): void {
     if (!this.win) return
     const cursor = screen.getCursorScreenPoint()
-    const display = screen.getDisplayNearestPoint(cursor).workArea
+    const target = OverlayController.targetBounds
+    const bounds = target.width > 0 && target.height > 0
+      ? target
+      : screen.getDisplayNearestPoint(cursor).workArea
 
-    const x = Math.min(Math.max(cursor.x + 16, display.x), display.x + display.width - width)
-    const y = Math.min(Math.max(cursor.y - 24, display.y), display.y + display.height - height)
+    const relX = cursor.x - bounds.x + 16
+    const relY = cursor.y - bounds.y - 24
+    const x = Math.min(Math.max(relX, 8), Math.max(8, bounds.width - width - 8))
+    const y = Math.min(Math.max(relY, 8), Math.max(8, bounds.height - height - 8))
 
-    this.win.setBounds({ x, y, width, height })
-    this.win.setIgnoreMouseEvents(false)
-    this.win.showInactive()
     this.overlayVisible = true
+    this.sendState({ visible: true, mode: 'price-check', x, y })
+    if (this.attached) {
+      this.gameActive = false
+      OverlayController.activateOverlay()
+    } else {
+      this.win.show()
+      this.win.focus()
+    }
   }
 
   showStandalone (): void {
     if (!this.win) return
-    this.win.setIgnoreMouseEvents(false)
-    this.win.center()
-    this.win.show()
-    this.win.focus()
     this.overlayVisible = true
+    this.sendState({ visible: true, mode: 'settings' })
+    if (this.attached) {
+      this.gameActive = false
+      OverlayController.activateOverlay()
+    } else {
+      this.win.center()
+      this.win.show()
+      this.win.focus()
+    }
   }
 
   hide (): void {
     if (!this.win) return
-    this.win.setIgnoreMouseEvents(true, { forward: true })
-    this.win.hide()
     this.overlayVisible = false
+    this.sendState({ visible: false })
     if (this.attached) {
       OverlayController.focusTarget()
+      this.gameActive = true
+    } else {
+      this.win.hide()
     }
   }
 
   send (channel: string, payload: unknown): void {
     this.win?.webContents.send(channel, payload)
+  }
+
+  private sendState (state: OverlayStatePayload): void {
+    this.send(IPC_CHANNELS.OVERLAY_STATE, state)
   }
 }

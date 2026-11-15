@@ -1,9 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type AppConfig, type PriceCheckResult, type TradeSearchRequest } from '../shared/types'
+import {
+  IPC_CHANNELS,
+  type AppConfig,
+  type OverlayStatePayload,
+  type PriceCheckResult,
+  type TradeSearchRequest
+} from '../shared/types'
 
 export interface PoeCheckApi {
   onPriceCheckResult: (cb: (result: PriceCheckResult) => void) => () => void
   onPriceCheckLoading: (cb: (loading: boolean) => void) => () => void
+  onOverlayState: (cb: (state: OverlayStatePayload) => void) => () => void
   searchTrade: (req: TradeSearchRequest) => Promise<PriceCheckResult>
   hideOverlay: () => void
   getConfig: () => Promise<AppConfig>
@@ -22,6 +29,11 @@ const api: PoeCheckApi = {
     const listener = (_: Electron.IpcRendererEvent, loading: boolean) => cb(loading)
     ipcRenderer.on(IPC_CHANNELS.PRICE_CHECK_LOADING, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.PRICE_CHECK_LOADING, listener)
+  },
+  onOverlayState (cb) {
+    const listener = (_: Electron.IpcRendererEvent, state: OverlayStatePayload) => cb(state)
+    ipcRenderer.on(IPC_CHANNELS.OVERLAY_STATE, listener)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.OVERLAY_STATE, listener)
   },
   searchTrade: (req) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_TRADE, req),
   hideOverlay: () => ipcRenderer.send(IPC_CHANNELS.HIDE_OVERLAY),

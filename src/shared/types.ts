@@ -106,9 +106,17 @@ export const DEFAULT_CONFIG: AppConfig = {
   overlayMaxHeight: 560
 }
 
+export interface OverlayStatePayload {
+  visible: boolean
+  mode?: 'price-check' | 'settings'
+  x?: number
+  y?: number
+}
+
 export const IPC_CHANNELS = {
   PRICE_CHECK_RESULT: 'price-check:result',
   PRICE_CHECK_LOADING: 'price-check:loading',
+  OVERLAY_STATE: 'overlay:state',
   SEARCH_TRADE: 'trade:search',
   HIDE_OVERLAY: 'overlay:hide',
   GET_CONFIG: 'config:get',
