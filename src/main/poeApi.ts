@@ -34,6 +34,7 @@ export class PoeApiClient {
   private ninjaLoadedLeague = ''
   private ninjaLoadedAt = 0
   private divineChaosRate = 0
+  private searchCache = new Map<string, { at: number; result: PriceCheckResult }>()
 
   constructor (private readonly getConfig: () => AppConfig) {
     this.cacheDir = path.join(app.getPath('userData'), 'cache')
@@ -192,7 +193,7 @@ export class PoeApiClient {
 
     const isLocalItem = Boolean(item.weapon || item.armour)
     const matchedMods: MatchedModifier[] = this.matcher
-      ? this.matcher.matchAll(item.modifiers, { isLocalItem })
+      ? mergeMatchedMods(this.matcher.matchAll(item.modifiers, { isLocalItem }))
       : []
 
     // Fast path via poe.ninja for Currency, Divination Card, Unique, Gem
@@ -258,7 +259,7 @@ export class PoeApiClient {
     const isLocalItem = Boolean(req.item.weapon || req.item.armour)
     const matchedMods =
       existingMatchedMods ??
-      (this.matcher ? this.matcher.matchAll(req.item.modifiers, { isLocalItem }) : [])
+      (this.matcher ? mergeMatchedMods(this.matcher.matchAll(req.item.modifiers, { isLocalItem })) : [])
 
     // Merge duplicate statIds (e.g. hybrid % increased Physical Damage mods) by summing mins
     const mergedMap = new Map<string, { min?: number; max?: number }>()
@@ -347,6 +348,12 @@ export class PoeApiClient {
       query.filters = filters
     }
 
+    const cacheKey = JSON.stringify({ league: cfg.league, query })
+    const cachedSearch = this.searchCache.get(cacheKey)
+    if (cachedSearch && Date.now() - cachedSearch.at < 30_000) {
+      return { ...cachedSearch.result, item: req.item, matchedMods }
+    }
+
     try {
       const searchRes = await this.fetchJson<{
         id: string
@@ -361,7 +368,7 @@ export class PoeApiClient {
       const tradeUrl = `https://www.pathofexile.com/trade/search/${encodeURIComponent(cfg.league)}/${searchRes.id}`
       const ids = searchRes.result.slice(0, 10)
       if (ids.length === 0) {
-        return {
+        const emptyRes: PriceCheckResult = {
           source: 'trade',
           item: req.item,
           totalResults: 0,
@@ -369,6 +376,8 @@ export class PoeApiClient {
           listings: [],
           matchedMods
         }
+        this.searchCache.set(cacheKey, { at: Date.now(), result: emptyRes })
+        return emptyRes
       }
 
       const fetchRes = await this.fetchJson<{
@@ -393,7 +402,7 @@ export class PoeApiClient {
         })
       }
 
-      return {
+      const out: PriceCheckResult = {
         source: 'trade',
         item: req.item,
         totalResults: searchRes.total,
@@ -401,6 +410,8 @@ export class PoeApiClient {
         listings,
         matchedMods
       }
+      this.searchCache.set(cacheKey, { at: Date.now(), result: out })
+      return out
     } catch (err) {
       return {
         source: 'trade',
@@ -412,7 +423,7 @@ export class PoeApiClient {
     }
   }
 
-  private async fetchJson<T> (url: string, init?: RequestInit): Promise<T> {
+  private async fetchJson<T> (url: string, init?: RequestInit, retried = false): Promise<T> {
     const cfg = this.getConfig()
     const res = await fetch(url, {
       ...init,
@@ -423,6 +434,14 @@ export class PoeApiClient {
         ...(init?.headers ?? {})
       }
     })
+    if (res.status === 429) {
+      const retryAfter = Number.parseInt(res.headers.get('retry-after') ?? '0', 10) || 2
+      if (!retried && retryAfter <= 5) {
+        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000))
+        return this.fetchJson<T>(url, init, true)
+      }
+      throw new Error(`Rate limited by PoE Trade API (retry in ${retryAfter}s)`)
+    }
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`HTTP ${res.status} (${url}): ${body.slice(0, 140)}`)
@@ -455,4 +474,40 @@ export class PoeApiClient {
 
 function sanitizeFilename (name: string): string {
   return name.replace(/[^a-z0-9_-]/gi, '_')
+}
+
+function mergeMatchedMods (mods: MatchedModifier[]): MatchedModifier[] {
+  const out: MatchedModifier[] = []
+  const byStatAndKind = new Map<string, number>()
+
+  for (const mod of mods) {
+    if (!mod.statId || mod.modifier.values.length !== 1) {
+      out.push(mod)
+      continue
+    }
+    const key = `${mod.statId}::${mod.modifier.kind}`
+    const existingIdx = byStatAndKind.get(key)
+    if (existingIdx === undefined) {
+      byStatAndKind.set(key, out.length)
+      out.push(mod)
+      continue
+    }
+
+    const existing = out[existingIdx]
+    const summed = existing.modifier.values[0] + mod.modifier.values[0]
+    const updatedDisplay = existing.modifier.template.replace(/\+?#/g, (m) =>
+      m.startsWith('+') ? `+${summed}` : String(summed)
+    )
+    out[existingIdx] = {
+      ...existing,
+      modifier: {
+        ...existing.modifier,
+        display: updatedDisplay,
+        values: [summed],
+        tier: existing.modifier.tier ?? mod.modifier.tier
+      }
+    }
+  }
+
+  return out
 }
