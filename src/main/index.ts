@@ -1,4 +1,4 @@
-import { app, ipcMain, Menu, nativeImage, Tray } from 'electron'
+import { app, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
 import { parseItemText } from '../shared/itemParser'
 import { IPC_CHANNELS, type AppConfig, type TradeSearchRequest } from '../shared/types'
 import { ConfigStore } from './config'
@@ -44,6 +44,11 @@ async function main (): Promise<void> {
 
   // IPC handlers
   ipcMain.on(IPC_CHANNELS.HIDE_OVERLAY, () => overlay.hide())
+  ipcMain.on(IPC_CHANNELS.OPEN_EXTERNAL, (_e, url: string) => {
+    if (typeof url === 'string' && url.startsWith('https://')) {
+      void shell.openExternal(url)
+    }
+  })
   ipcMain.handle(IPC_CHANNELS.GET_CONFIG, () => configStore.get())
   ipcMain.handle(IPC_CHANNELS.SAVE_CONFIG, (_e, partial: Partial<AppConfig>) => configStore.save(partial))
   ipcMain.handle(IPC_CHANNELS.GET_LEAGUES, () => poeApi.getLeagues())

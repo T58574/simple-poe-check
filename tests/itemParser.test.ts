@@ -104,3 +104,46 @@ Iron Ring
   assert.equal(matched[0].statId, 'implicit.stat_2901986750')
   assert.equal(matched[1].statId, 'explicit.stat_3299347043')
 })
+
+test('parses Advanced Mod Descriptions with tiers, inline ranges, and weapon DPS', () => {
+  const raw = `Item Class: Warstaves
+Rarity: Rare
+Beast Goad
+Foul Staff
+--------
+Warstaff
+Quality: +22% (augmented)
+Physical Damage: 224-379 (augmented)
+Elemental Damage: 82-161 (augmented)
+Critical Strike Chance: 10.00% (augmented)
+Attacks per Second: 1.63 (augmented)
+--------
+Item Level: 85
+--------
+{ Implicit Modifier "Block" — Block }
++22% Chance to Block Attack Damage (implicit)
+--------
+{ Prefix Modifier "Glaciated" (Tier: 4) — Damage, Elemental, Cold, Attack }
+Adds 82(77-104) to 161(154-178) Cold Damage
+{ Prefix Modifier "Vicious" (Tier: 5) — Damage, Physical, Attack }
+102(85-109)% increased Physical Damage
+{ Suffix Modifier "of Destruction" (Tier: 1) — Damage, Critical }
++35(35-38)% to Global Critical Strike Multiplier`
+
+  const item = parseItemText(raw)
+  assert.ok(item)
+  assert.equal(item.tradeCategory, 'weapon.warstaff')
+  assert.ok(item.weapon)
+  assert.equal(item.weapon.physicalDps, 491)
+  assert.equal(item.weapon.elementalDps, 198)
+  assert.equal(item.weapon.totalDps, 689)
+  assert.equal(item.weapon.aps, 1.63)
+  assert.equal(item.weapon.crit, 10)
+  assert.equal(item.modifiers.length, 4)
+  assert.equal(item.modifiers[1].display, 'Adds 82 to 161 Cold Damage')
+  assert.equal(item.modifiers[1].template, 'Adds # to # Cold Damage')
+  assert.deepEqual(item.modifiers[1].values, [82, 161])
+  assert.equal(item.modifiers[1].tier, 4)
+  assert.equal(item.modifiers[3].display, '+35% to Global Critical Strike Multiplier')
+  assert.equal(item.modifiers[3].tier, 1)
+})

@@ -217,9 +217,22 @@ export class PoeApiClient {
     }
 
     // Trade API search for Rare / Magic / Normal / unmatched items
+    if (item.weapon && item.weapon.totalDps > 0) {
+      return this.searchTrade({
+        item,
+        filters: [],
+        useBaseType: false,
+        useIlvl: false,
+        useLinks: item.maxLinks >= 5,
+        weaponFilters: {
+          dps: { min: Math.floor(item.weapon.totalDps * 0.9) }
+        }
+      }, matchedMods)
+    }
+
     const enabledFilters = matchedMods
       .filter((m) => m.enabled && m.statId)
-      .slice(0, 6)
+      .slice(0, 3)
       .map((m) => ({
         statId: m.statId!,
         min: m.modifier.values.length > 0 ? Math.floor(m.modifier.values[0] * 0.85) : undefined
@@ -228,6 +241,7 @@ export class PoeApiClient {
     return this.searchTrade({
       item,
       filters: enabledFilters,
+      useBaseType: false,
       useIlvl: false,
       useLinks: item.maxLinks >= 5
     }, matchedMods)
@@ -259,17 +273,57 @@ export class PoeApiClient {
       query.type = req.item.baseType
     } else if (req.item.rarity === 'Currency' || req.item.rarity === 'Divination Card') {
       query.type = req.item.baseType
-    } else {
+    } else if (req.useBaseType || !req.item.tradeCategory) {
       query.type = req.item.baseType
     }
 
     const filters: Record<string, unknown> = {}
+
+    if (req.item.tradeCategory && !req.useBaseType && req.item.rarity !== 'Unique') {
+      filters.type_filters = {
+        filters: {
+          category: { option: req.item.tradeCategory }
+        }
+      }
+    }
+
+    if (req.weaponFilters) {
+      const wf: Record<string, unknown> = {}
+      if (req.weaponFilters.dps) wf.dps = req.weaponFilters.dps
+      if (req.weaponFilters.pdps) wf.pdps = req.weaponFilters.pdps
+      if (req.weaponFilters.edps) wf.edps = req.weaponFilters.edps
+      if (req.weaponFilters.aps) wf.aps = req.weaponFilters.aps
+      if (req.weaponFilters.crit) wf.crit = req.weaponFilters.crit
+      if (Object.keys(wf).length > 0) {
+        filters.weapon_filters = { filters: wf }
+      }
+    }
+
+    if (req.armourFilters) {
+      const af: Record<string, unknown> = {}
+      if (req.armourFilters.ar) af.ar = req.armourFilters.ar
+      if (req.armourFilters.ev) af.ev = req.armourFilters.ev
+      if (req.armourFilters.es) af.es = req.armourFilters.es
+      if (Object.keys(af).length > 0) {
+        filters.armour_filters = { filters: af }
+      }
+    }
+
     if (req.useLinks && req.item.maxLinks >= 5) {
       filters.socket_filters = { filters: { links: { min: req.item.maxLinks } } }
     }
+
+    const miscFilters: Record<string, unknown> = {}
     if (req.useIlvl && req.item.ilvl) {
-      filters.misc_filters = { filters: { ilvl: { min: req.item.ilvl } } }
+      miscFilters.ilvl = { min: req.item.ilvl }
     }
+    if (req.useCorrupted) {
+      miscFilters.corrupted = { option: req.item.corrupted ? 'true' : 'false' }
+    }
+    if (Object.keys(miscFilters).length > 0) {
+      filters.misc_filters = { filters: miscFilters }
+    }
+
     if (Object.keys(filters).length > 0) {
       query.filters = filters
     }

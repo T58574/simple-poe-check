@@ -12,14 +12,32 @@ export type ModifierKind = 'implicit' | 'explicit' | 'crafted' | 'fractured' | '
 
 export interface ItemModifier {
   raw: string
+  display: string
   template: string
   values: number[]
   kind: ModifierKind
+  tier?: number
+}
+
+export interface WeaponStats {
+  physicalDps: number
+  elementalDps: number
+  totalDps: number
+  aps: number
+  crit: number
+}
+
+export interface ArmourStats {
+  armour: number
+  evasion: number
+  energyShield: number
+  ward: number
 }
 
 export interface ParsedItem {
   rawText: string
   itemClass: string
+  tradeCategory: string | null
   rarity: ItemRarity
   name: string
   baseType: string
@@ -30,6 +48,8 @@ export interface ParsedItem {
   corrupted: boolean
   synthesised: boolean
   fractured: boolean
+  weapon?: WeaponStats
+  armour?: ArmourStats
   modifiers: ItemModifier[]
 }
 
@@ -65,6 +85,11 @@ export interface PriceCheckResult {
   error?: string
 }
 
+export interface NumericRange {
+  min?: number
+  max?: number
+}
+
 export interface TradeSearchModFilter {
   statId: string
   min?: number
@@ -74,8 +99,22 @@ export interface TradeSearchModFilter {
 export interface TradeSearchRequest {
   item: ParsedItem
   filters: TradeSearchModFilter[]
+  useBaseType?: boolean
   useIlvl?: boolean
   useLinks?: boolean
+  useCorrupted?: boolean
+  weaponFilters?: {
+    dps?: NumericRange
+    pdps?: NumericRange
+    edps?: NumericRange
+    aps?: NumericRange
+    crit?: NumericRange
+  }
+  armourFilters?: {
+    ar?: NumericRange
+    ev?: NumericRange
+    es?: NumericRange
+  }
 }
 
 export interface AppConfig {
@@ -102,8 +141,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   ninjaCacheTtlMinutes: 30,
   statsCacheTtlHours: 24,
   requestTimeoutMs: 8000,
-  overlayWidth: 420,
-  overlayMaxHeight: 560
+  overlayWidth: 440,
+  overlayMaxHeight: 620
 }
 
 export interface OverlayStatePayload {
@@ -119,6 +158,7 @@ export const IPC_CHANNELS = {
   OVERLAY_STATE: 'overlay:state',
   SEARCH_TRADE: 'trade:search',
   HIDE_OVERLAY: 'overlay:hide',
+  OPEN_EXTERNAL: 'shell:open-external',
   GET_CONFIG: 'config:get',
   SAVE_CONFIG: 'config:save',
   GET_LEAGUES: 'leagues:get',

@@ -1,7 +1,17 @@
-import type { ItemModifier, ItemRarity, ModifierKind, ParsedItem } from './types'
+import type {
+  ArmourStats,
+  ItemModifier,
+  ItemRarity,
+  ModifierKind,
+  ParsedItem,
+  WeaponStats
+} from './types'
 
 const SECTION_SPLIT = /\r?\n--------\r?\n/
 const NUMBER_RE = /[+-]?\d+(?:\.\d+)?/g
+const INLINE_RANGE_RE = /(\d+(?:\.\d+)?)\([^)]+\)/g
+const META_MOD_RE = /^\{(.+)\}$/
+const TIER_RE = /\(Tier:\s*(\d+)\)/i
 
 const RARITY_MAP: Record<string, ItemRarity> = {
   normal: 'Normal',
@@ -11,6 +21,38 @@ const RARITY_MAP: Record<string, ItemRarity> = {
   currency: 'Currency',
   gem: 'Gem',
   'divination card': 'Divination Card'
+}
+
+const ITEM_CLASS_TO_CATEGORY: Record<string, string> = {
+  'One Hand Swords': 'weapon.onesword',
+  'Thrusting One Hand Swords': 'weapon.onesword',
+  'Two Hand Swords': 'weapon.twosword',
+  'One Hand Axes': 'weapon.oneaxe',
+  'Two Hand Axes': 'weapon.twoaxe',
+  'One Hand Maces': 'weapon.onemace',
+  'Two Hand Maces': 'weapon.twomace',
+  Sceptres: 'weapon.sceptre',
+  Staves: 'weapon.staff',
+  Warstaves: 'weapon.warstaff',
+  Bows: 'weapon.bow',
+  Claws: 'weapon.claw',
+  Daggers: 'weapon.dagger',
+  'Rune Daggers': 'weapon.runedagger',
+  Wands: 'weapon.wand',
+  Shields: 'armour.shield',
+  Helmets: 'armour.helmet',
+  'Body Armours': 'armour.chest',
+  Gloves: 'armour.gloves',
+  Boots: 'armour.boots',
+  Quivers: 'armour.quiver',
+  Amulets: 'accessory.amulet',
+  Rings: 'accessory.ring',
+  Belts: 'accessory.belt',
+  Jewels: 'jewel',
+  'Abyss Jewels': 'jewel.abyss',
+  'Cluster Jewels': 'jewel.cluster',
+  Flasks: 'flask',
+  Maps: 'map'
 }
 
 const KNOWN_FLAGS = new Set([
@@ -56,9 +98,17 @@ const NON_MOD_PREFIXES = [
   'Shift click'
 ]
 
-export function normalizeModTemplate (raw: string): { template: string; values: number[]; kind: ModifierKind } {
-  let kind: ModifierKind = 'explicit'
-  let cleaned = raw.trim()
+export function stripInlineRanges (raw: string): string {
+  return raw.replace(INLINE_RANGE_RE, '$1')
+}
+
+export function normalizeModTemplate (
+  raw: string,
+  hintedKind?: ModifierKind,
+  hintedTier?: number
+): { display: string; template: string; values: number[]; kind: ModifierKind; tier?: number } {
+  let kind: ModifierKind = hintedKind ?? 'explicit'
+  let cleaned = stripInlineRanges(raw.trim())
 
   if (cleaned.endsWith(' (implicit)')) {
     kind = 'implicit'
@@ -74,14 +124,32 @@ export function normalizeModTemplate (raw: string): { template: string; values: 
     cleaned = cleaned.slice(0, -' (enchant)'.length)
   }
 
+  cleaned = cleaned.replace(/\s*\((?:augmented|unscalable)\)/g, '').trim()
+
   const values: number[] = []
   const template = cleaned.replace(NUMBER_RE, (match) => {
     const num = Number(match)
     values.push(num)
-    return match.startsWith('+') ? '+#': '#'
+    return match.startsWith('+') ? '+#' : '#'
   })
 
-  return { template, values, kind }
+  return { display: cleaned, template, values, kind, tier: hintedTier }
+}
+
+function parseMetaLine (line: string): { kind?: ModifierKind; tier?: number } | null {
+  const m = line.match(META_MOD_RE)
+  if (!m) return null
+  const inner = m[1]
+  let kind: ModifierKind | undefined
+  if (/Implicit Modifier/i.test(inner)) kind = 'implicit'
+  else if (/Master Crafted/i.test(inner) || /Crafted/i.test(inner)) kind = 'crafted'
+  else if (/Fractured/i.test(inner)) kind = 'fractured'
+  else if (/Enchant/i.test(inner)) kind = 'enchant'
+  else if (/Prefix Modifier|Suffix Modifier/i.test(inner)) kind = 'explicit'
+
+  const tierMatch = inner.match(TIER_RE)
+  const tier = tierMatch ? Number.parseInt(tierMatch[1], 10) : undefined
+  return { kind, tier }
 }
 
 function parseMaxLinks (socketsLine: string): number {
@@ -95,6 +163,22 @@ function parseMaxLinks (socketsLine: string): number {
     }
   }
   return maxLinks
+}
+
+function parseDamageRangesAverage (line: string): number {
+  const matches = line.matchAll(/(\d+)-(\d+)/g)
+  let totalAvg = 0
+  for (const m of matches) {
+    const min = Number.parseFloat(m[1])
+    const max = Number.parseFloat(m[2])
+    totalAvg += (min + max) / 2
+  }
+  return totalAvg
+}
+
+function parseFirstFloat (line: string): number {
+  const m = line.match(/(\d+(?:\.\d+)?)/)
+  return m ? Number.parseFloat(m[1]) : 0
 }
 
 function isModLine (line: string): boolean {
@@ -140,13 +224,24 @@ export function parseItemText (rawText: string): ParsedItem | null {
   let corrupted = false
   let synthesised = false
   let fractured = false
+
+  let physAvg = 0
+  let eleAvg = 0
+  let chaosAvg = 0
+  let aps = 0
+  let crit = 0
+
+  let armourVal = 0
+  let evasionVal = 0
+  let esVal = 0
+  let wardVal = 0
+
   const modifiers: ItemModifier[] = []
 
   for (let i = 1; i < sections.length; i++) {
     const lines = sections[i].split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
     if (lines.length === 0) continue
 
-    // Flavor text on uniques / divination cards is usually the last non-mod section without numbers or tags
     let sectionHasKnownHeader = false
     for (const line of lines) {
       if (line.startsWith('Item Level:')) {
@@ -163,6 +258,33 @@ export function parseItemText (rawText: string): ParsedItem | null {
       } else if (line.startsWith('Sockets:')) {
         maxLinks = parseMaxLinks(line)
         sectionHasKnownHeader = true
+      } else if (line.startsWith('Physical Damage:')) {
+        physAvg = parseDamageRangesAverage(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Elemental Damage:')) {
+        eleAvg = parseDamageRangesAverage(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Chaos Damage:')) {
+        chaosAvg = parseDamageRangesAverage(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Attacks per Second:')) {
+        aps = parseFirstFloat(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Critical Strike Chance:')) {
+        crit = parseFirstFloat(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Armour:')) {
+        armourVal = parseFirstFloat(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Evasion Rating:')) {
+        evasionVal = parseFirstFloat(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Energy Shield:')) {
+        esVal = parseFirstFloat(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Ward:')) {
+        wardVal = parseFirstFloat(line)
+        sectionHasKnownHeader = true
       } else if (line === 'Corrupted') {
         corrupted = true
         sectionHasKnownHeader = true
@@ -177,26 +299,60 @@ export function parseItemText (rawText: string): ParsedItem | null {
 
     if (sectionHasKnownHeader) continue
 
-    // Skip requirements / stats blocks
     if (lines.some((l) => l.startsWith('Requirements:') || l.startsWith('Note:') || l.startsWith('Place into'))) {
       continue
     }
 
+    let pendingKind: ModifierKind | undefined
+    let pendingTier: number | undefined
+
     for (const line of lines) {
+      const meta = parseMetaLine(line)
+      if (meta) {
+        pendingKind = meta.kind
+        pendingTier = meta.tier
+        continue
+      }
+
       if (!isModLine(line)) continue
-      // Skip pure flavor text on Unique items (no numbers and no mod tags)
       if (rarity === 'Unique' && !/\d/.test(line) && !line.includes('(')) {
         continue
       }
-      const { template, values, kind } = normalizeModTemplate(line)
-      if (kind === 'fractured') fractured = true
-      modifiers.push({ raw: line, template, values, kind })
+
+      const normalized = normalizeModTemplate(line, pendingKind, pendingTier)
+      if (normalized.kind === 'fractured') fractured = true
+      modifiers.push({
+        raw: line,
+        display: normalized.display,
+        template: normalized.template,
+        values: normalized.values,
+        kind: normalized.kind,
+        tier: normalized.tier
+      })
+      pendingKind = undefined
+      pendingTier = undefined
     }
   }
+
+  let weapon: WeaponStats | undefined
+  if (aps > 0 && (physAvg > 0 || eleAvg > 0 || chaosAvg > 0)) {
+    const physicalDps = Math.round(physAvg * aps)
+    const elementalDps = Math.round(eleAvg * aps)
+    const totalDps = Math.round((physAvg + eleAvg + chaosAvg) * aps)
+    weapon = { physicalDps, elementalDps, totalDps, aps, crit }
+  }
+
+  let armour: ArmourStats | undefined
+  if (armourVal > 0 || evasionVal > 0 || esVal > 0 || wardVal > 0) {
+    armour = { armour: armourVal, evasion: evasionVal, energyShield: esVal, ward: wardVal }
+  }
+
+  const tradeCategory = ITEM_CLASS_TO_CATEGORY[itemClass] ?? null
 
   return {
     rawText: trimmed,
     itemClass,
+    tradeCategory,
     rarity,
     name,
     baseType,
@@ -207,6 +363,8 @@ export function parseItemText (rawText: string): ParsedItem | null {
     corrupted,
     synthesised,
     fractured,
+    weapon,
+    armour,
     modifiers
   }
 }

@@ -13,6 +13,7 @@ export interface PoeCheckApi {
   onOverlayState: (cb: (state: OverlayStatePayload) => void) => () => void
   searchTrade: (req: TradeSearchRequest) => Promise<PriceCheckResult>
   hideOverlay: () => void
+  openExternal: (url: string) => void
   getConfig: () => Promise<AppConfig>
   saveConfig: (partial: Partial<AppConfig>) => Promise<AppConfig>
   getLeagues: () => Promise<string[]>
@@ -37,6 +38,7 @@ const api: PoeCheckApi = {
   },
   searchTrade: (req) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_TRADE, req),
   hideOverlay: () => ipcRenderer.send(IPC_CHANNELS.HIDE_OVERLAY),
+  openExternal: (url) => ipcRenderer.send(IPC_CHANNELS.OPEN_EXTERNAL, url),
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),
   saveConfig: (partial) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, partial),
   getLeagues: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LEAGUES),
