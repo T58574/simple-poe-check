@@ -139,6 +139,7 @@ export interface TradeSearchRequest {
   useIlvl?: boolean
   useLinks?: boolean
   useCorrupted?: boolean
+  useQuality?: boolean
   weaponFilters?: {
     dps?: NumericRange
     pdps?: NumericRange

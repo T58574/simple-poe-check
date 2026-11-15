@@ -32,6 +32,7 @@ const useBaseType = ref(false)
 const useIlvl = ref(false)
 const useLinks = ref(false)
 const useCorrupted = ref(false)
+const useQuality = ref(false)
 
 const enabledMods = ref<Set<number>>(new Set())
 const modMins = reactive<Record<number, number | undefined>>({})
@@ -71,6 +72,7 @@ function syncFiltersFromResult (res: PriceCheckResult): void {
   useIlvl.value = false
   useLinks.value = item.maxLinks >= 5
   useCorrupted.value = false
+  useQuality.value = item.rarity === 'Gem' && (item.quality ?? 0) >= 20
 
   weaponEnabled.dps = false
   weaponEnabled.pdps = false
@@ -99,7 +101,7 @@ function syncFiltersFromResult (res: PriceCheckResult): void {
   }
   res.matchedMods.forEach((m, idx) => {
     if (m.modifier.values.length > 0) {
-      modMins[idx] = calcDefaultMinFilter(m.modifier.values)
+      modMins[idx] = calcDefaultMinFilter(m.modifier.values, undefined, m.modifier.tier)
     }
     if (!item.weapon && m.enabled && m.statId && nextMods.size < 3) {
       nextMods.add(idx)
@@ -163,6 +165,7 @@ async function runSearch (): Promise<void> {
       useIlvl: useIlvl.value,
       useLinks: useLinks.value,
       useCorrupted: useCorrupted.value,
+      useQuality: useQuality.value,
       weaponFilters: Object.keys(weaponFilters).length > 0 ? weaponFilters : undefined,
       armourFilters: Object.keys(armourFilters).length > 0 ? armourFilters : undefined
     })
@@ -395,6 +398,10 @@ onUnmounted(() => {
             <input v-model="useLinks" type="checkbox" hidden @change="scheduleAutoSearch" />
             {{ result.item.maxLinks }}L
           </label>
+          <label v-if="result.item.quality && result.item.quality > 0" class="pill" :class="{ active: useQuality }">
+            <input v-model="useQuality" type="checkbox" hidden @change="scheduleAutoSearch" />
+            Q{{ result.item.quality }}%
+          </label>
           <label class="pill" :class="{ active: useCorrupted }">
             <input v-model="useCorrupted" type="checkbox" hidden @change="scheduleAutoSearch" />
             Corrupt
@@ -508,6 +515,9 @@ onUnmounted(() => {
             <div v-if="result.source === 'ninja' && result.chaosValue !== undefined" class="price-banner">
               <div>
                 <div class="price-main">{{ result.chaosValue }} c</div>
+                <div v-if="result.item.stackSize && result.item.stackSize > 1" class="price-sub">
+                  {{ result.item.stackSize }}x = {{ Number((result.chaosValue * result.item.stackSize).toFixed(1)) }} c
+                </div>
                 <div v-if="result.divineValue" class="price-sub">{{ result.divineValue }} div</div>
               </div>
               <span class="price-sub">poe.ninja</span>

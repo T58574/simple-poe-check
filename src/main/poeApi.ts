@@ -605,7 +605,9 @@ export class PoeApiClient {
       return {
         source: 'ninja',
         item,
-        chaosValue: Number(ninjaHit.chaosValue.toFixed(1)),
+        chaosValue: ninjaHit.chaosValue >= 1
+          ? Number(ninjaHit.chaosValue.toFixed(1))
+          : Number(ninjaHit.chaosValue.toFixed(3)),
         divineValue,
         ninjaAmbiguous: ambiguous || undefined,
         ninjaVariantNote: ambiguous ? 'Multiple variants on poe.ninja — verify rolls on Trade' : undefined,
@@ -634,7 +636,7 @@ export class PoeApiClient {
       .slice(0, 3)
       .map((m) => ({
         statId: m.statId!,
-        min: calcDefaultMinFilter(m.modifier.values)
+        min: calcDefaultMinFilter(m.modifier.values, undefined, m.modifier.tier)
       }))
 
     return this.searchTrade({
@@ -680,6 +682,8 @@ export class PoeApiClient {
       stats: [{ type: 'and', filters: statFilters }]
     }
 
+    const isGenericTieredMap = req.item.itemClass === 'Maps' && /^Map \(Tier \d+\)$/i.test(req.item.baseType)
+
     if (req.item.rarity === 'Unique') {
       if (!req.item.unidentified) {
         query.name = req.item.name
@@ -691,13 +695,27 @@ export class PoeApiClient {
       req.item.rarity === 'Gem'
     ) {
       query.type = req.item.baseType
-    } else if ((req.useBaseType || !req.item.tradeCategory) && req.item.rarity !== 'Magic') {
+    } else if (!isGenericTieredMap && (req.useBaseType || !req.item.tradeCategory) && req.item.rarity !== 'Magic') {
       query.type = req.item.baseType
     }
 
     const filters: Record<string, unknown> = {}
 
-    if (req.item.tradeCategory && !req.useBaseType && req.item.rarity !== 'Unique') {
+    if (req.item.itemClass === 'Maps' && req.item.rarity !== 'Unique') {
+      filters.type_filters = {
+        filters: {
+          category: { option: 'map' },
+          rarity: { option: 'nonunique' }
+        }
+      }
+      if (req.item.mapTier) {
+        filters.map_filters = {
+          filters: {
+            map_tier: { min: req.item.mapTier, max: req.item.mapTier }
+          }
+        }
+      }
+    } else if (req.item.tradeCategory && !req.useBaseType && req.item.rarity !== 'Unique') {
       filters.type_filters = {
         filters: {
           category: { option: req.item.tradeCategory }
@@ -743,6 +761,9 @@ export class PoeApiClient {
     }
     if (req.useCorrupted) {
       miscFilters.corrupted = { option: req.item.corrupted ? 'true' : 'false' }
+    }
+    if (req.useQuality && req.item.quality && req.item.quality > 0) {
+      miscFilters.quality = { min: req.item.quality }
     }
     if (req.item.rarity === 'Unique' && req.item.unidentified) {
       miscFilters.identified = { option: 'false' }

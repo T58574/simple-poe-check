@@ -260,3 +260,35 @@ Ruby Ring
   assert.equal(calcDefaultMinFilter([0.4], 0.85), 0.3)
   assert.equal(calcDefaultMinFilter([-10], 0.85), -12)
 })
+
+test('parses Map (Tier 15) generic map, hybrid fractured mod with inline (Local), and T1 min filter', () => {
+  const mapText = [
+    'Item Class: Maps',
+    'Rarity: Normal',
+    'Map (Tier 15)',
+    '--------',
+    'Item Level: 83',
+    '--------',
+    'Monster Level: 82'
+  ].join('\n')
+  const mapItem = parseItemText(mapText)
+  assert.ok(mapItem)
+  assert.equal(mapItem.mapTier, 15)
+  assert.equal(mapItem.rarity, 'Normal')
+
+  const matcher = new StatMatcher([
+    { id: 'local_ar_life', text: '+# to Armour (Local)\n+# to maximum Life', type: 'fractured' }
+  ])
+  const matched = matcher.matchModifier({
+    raw: '+35 to Armour +25 to maximum Life',
+    display: '+35 to Armour +25 to maximum Life',
+    template: '+# to Armour +# to maximum Life',
+    values: [35, 25],
+    kind: 'fractured',
+    tier: 1
+  })
+  assert.equal(matched.statId, 'local_ar_life')
+  assert.equal(matched.enabled, true)
+
+  assert.equal(calcDefaultMinFilter([48], undefined, 1), 45)
+})

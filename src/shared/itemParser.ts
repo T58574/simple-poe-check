@@ -480,6 +480,13 @@ export function parseItemText (rawText: string): ParsedItem | null {
 
   const tradeCategory = ITEM_CLASS_TO_CATEGORY[itemClass] ?? null
 
+  if (!mapTier && itemClass === 'Maps') {
+    const tierMatch = baseType.match(/Map \(Tier (\d+)\)/i) ?? name.match(/Map \(Tier (\d+)\)/i)
+    if (tierMatch) {
+      mapTier = Number.parseInt(tierMatch[1], 10) || undefined
+    }
+  }
+
   return {
     rawText: trimmed,
     itemClass,
