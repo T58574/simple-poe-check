@@ -269,7 +269,7 @@ export class HotkeyManager {
   private async triggerPriceCheck (e: UiohookKeyboardEvent, afterOverlayClose: boolean): Promise<void> {
     this.busy = true
     const cfg = this.getConfig()
-    const prevClipboard = clipboard.readText()
+    const prevClipboard = await clipboard.readText()
     const sentinel = process.platform === 'linux' || isPoeItemText(prevClipboard)
       ? `__SPC_EMPTY_${Date.now()}`
       : ''
@@ -281,7 +281,7 @@ export class HotkeyManager {
       releaseHeldModifiers(e, e.keycode)
       await delay(10)
 
-      clipboard.writeText(sentinel)
+      await clipboard.writeText(sentinel)
       uIOhook.keyTap(UiohookKey.C, [UiohookKey.Ctrl])
 
       let itemText = ''
@@ -289,7 +289,7 @@ export class HotkeyManager {
       while (elapsed < POLL_TIMEOUT_MS) {
         await delay(POLL_DELAY_MS)
         elapsed += POLL_DELAY_MS
-        const current = clipboard.readText()
+        const current = await clipboard.readText()
         if (current !== sentinel && isPoeItemText(current)) {
           itemText = current
           break
@@ -302,7 +302,7 @@ export class HotkeyManager {
     } finally {
       setTimeout(() => {
         if (cfg.restoreClipboard) {
-          clipboard.writeText(prevClipboard)
+          void clipboard.writeText(prevClipboard).catch(() => {})
         }
         this.busy = false
       }, CLIPBOARD_RESTORE_MS)
@@ -312,7 +312,7 @@ export class HotkeyManager {
   private async triggerChatMacro (e: UiohookKeyboardEvent, macro: ChatMacro): Promise<void> {
     this.busy = true
     const cfg = this.getConfig()
-    const prevClipboard = clipboard.readText()
+    const prevClipboard = await clipboard.readText()
 
     try {
       releaseHeldModifiers(e, e.keycode)
@@ -324,12 +324,12 @@ export class HotkeyManager {
         text = text.slice('@last'.length).trimStart()
         uIOhook.keyTap(UiohookKey.Enter, [UiohookKey.Ctrl])
         if (text.length > 0) {
-          clipboard.writeText(text)
+          await clipboard.writeText(text)
         } else {
           shouldPaste = false
         }
       } else {
-        clipboard.writeText(text)
+        await clipboard.writeText(text)
         uIOhook.keyTap(UiohookKey.Enter)
         await delay(20)
         if (text.length > 0 && !AUTO_CLEAR_PREFIXES.has(text[0])) {
@@ -350,7 +350,7 @@ export class HotkeyManager {
     } finally {
       setTimeout(() => {
         if (cfg.restoreClipboard) {
-          clipboard.writeText(prevClipboard)
+          void clipboard.writeText(prevClipboard).catch(() => {})
         }
         this.busy = false
       }, CLIPBOARD_RESTORE_MS)
