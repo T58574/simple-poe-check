@@ -75,14 +75,20 @@ export class OverlayWindowManager {
   showAtCursor (width: number, _height: number): void {
     if (!this.win) return
     const cursor = screen.getCursorScreenPoint()
+    const winBounds = this.win.getBounds()
     const target = OverlayController.targetBounds
-    const bounds = target.width > 0 && target.height > 0
-      ? target
-      : screen.getDisplayNearestPoint(cursor).workArea
+    const bounds = winBounds.width > 0 && winBounds.height > 0
+      ? winBounds
+      : target.width > 0 && target.height > 0
+        ? target
+        : screen.getDisplayNearestPoint(cursor).workArea
 
+    const gap = 28
     const cursorRelX = cursor.x - bounds.x
-    const dockLeft = cursorRelX > bounds.width / 2
-    const x = dockLeft ? 0 : Math.max(0, bounds.width - width)
+    const placeRight = cursorRelX <= bounds.width / 2
+    const x = placeRight
+      ? Math.min(Math.max(0, bounds.width - width), Math.max(0, cursorRelX + gap))
+      : Math.max(0, cursorRelX - width - gap)
 
     this.overlayVisible = true
     this.currentMode = 'price-check'

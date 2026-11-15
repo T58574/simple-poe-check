@@ -58,7 +58,8 @@ const cardStyle = computed(() => {
     left: `${posX.value}px`,
     top: `${posY.value}px`,
     width: `${config.value.overlayWidth}px`,
-    maxHeight: `${config.value.overlayMaxHeight}px`
+    height: '100vh',
+    maxHeight: '100vh'
   }
 })
 
