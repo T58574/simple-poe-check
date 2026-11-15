@@ -174,11 +174,15 @@ export interface AppConfig {
   realm: 'pc'
   gameWindowTitle: string
   priceCheckHotkey: string
+  toggleAppHotkey: string
   hideoutHotkey: string
   closeHotkey: string
   chatMacros: ChatMacro[]
   tradeStatus: TradeStatusOption
   poeSessId: string
+  accountName: string
+  selectedStashTabIds: string[]
+  bulkMinChaos: number
   autoSearchOnFilterChange: boolean
   restoreClipboard: boolean
   ninjaCacheTtlMinutes: number
@@ -195,11 +199,15 @@ export const DEFAULT_CONFIG: AppConfig = {
   realm: 'pc',
   gameWindowTitle: 'Path of Exile',
   priceCheckHotkey: 'Ctrl+D',
+  toggleAppHotkey: 'Ctrl+Space',
   hideoutHotkey: 'F5',
   closeHotkey: 'Escape',
   chatMacros: DEFAULT_CHAT_MACROS,
   tradeStatus: 'available',
   poeSessId: '',
+  accountName: '',
+  selectedStashTabIds: [],
+  bulkMinChaos: 10,
   autoSearchOnFilterChange: true,
   restoreClipboard: true,
   ninjaCacheTtlMinutes: 60,
@@ -210,9 +218,86 @@ export const DEFAULT_CONFIG: AppConfig = {
   overlayMaxHeight: 620
 }
 
+export interface StashTabInfo {
+  id: string
+  name: string
+  index: number
+  type: string
+  colour?: { r: number; g: number; b: number }
+}
+
+export interface PricedStashItem {
+  id: string
+  key: string
+  name: string
+  baseType: string
+  typeLine: string
+  icon: string
+  stackSize: number
+  unitChaos: number
+  totalChaos: number
+  tabId: string
+  tabName: string
+  category: string
+  rarity: ItemRarity
+  frameType: number
+  links: number
+  corrupted: boolean
+}
+
+export interface StashSnapshot {
+  id: string
+  league: string
+  createdAt: number
+  totalChaos: number
+  totalDivine: number
+  divineRate: number
+  tabs: Array<{ id: string; name: string; totalChaos: number; itemCount: number }>
+  items: PricedStashItem[]
+}
+
+export interface SnapshotDiffItem {
+  key: string
+  name: string
+  icon: string
+  category: string
+  deltaQty: number
+  deltaChaos: number
+  currentQty: number
+  unitChaos: number
+}
+
+export interface FarmSessionSummary {
+  startedAt: number
+  endedAt: number
+  durationMin: number
+  deltaChaos: number
+  deltaDivine: number
+  chaosPerHour: number
+  divinePerHour: number
+  topGains: SnapshotDiffItem[]
+}
+
+export interface BulkListingItem {
+  key: string
+  name: string
+  icon: string
+  category: string
+  quantity: number
+  unitChaos: number
+  totalChaos: number
+  tabs: string[]
+}
+
+export interface StashAuthStatus {
+  authenticated: boolean
+  accountName: string
+  hasSessId: boolean
+}
+
 export interface OverlayStatePayload {
   visible: boolean
-  mode?: 'price-check' | 'settings'
+  mode?: 'price-check' | 'app' | 'settings'
   x?: number
   y?: number
 }
@@ -227,5 +312,12 @@ export const IPC_CHANNELS = {
   GET_CONFIG: 'config:get',
   SAVE_CONFIG: 'config:save',
   GET_LEAGUES: 'leagues:get',
-  REFRESH_CACHE: 'cache:refresh'
+  REFRESH_CACHE: 'cache:refresh',
+  STASH_AUTH_LOGIN: 'stash:auth-login',
+  STASH_AUTH_LOGOUT: 'stash:auth-logout',
+  STASH_AUTH_STATUS: 'stash:auth-status',
+  STASH_GET_TABS: 'stash:get-tabs',
+  STASH_TAKE_SNAPSHOT: 'stash:take-snapshot',
+  STASH_GET_SNAPSHOTS: 'stash:get-snapshots',
+  STASH_DELETE_SNAPSHOT: 'stash:delete-snapshot'
 } as const

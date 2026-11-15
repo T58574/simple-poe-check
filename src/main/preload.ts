@@ -4,6 +4,9 @@ import {
   type AppConfig,
   type OverlayStatePayload,
   type PriceCheckResult,
+  type StashAuthStatus,
+  type StashSnapshot,
+  type StashTabInfo,
   type TradeSearchRequest
 } from '../shared/types'
 
@@ -18,6 +21,13 @@ export interface PoeCheckApi {
   saveConfig: (partial: Partial<AppConfig>) => Promise<AppConfig>
   getLeagues: () => Promise<string[]>
   refreshCache: () => Promise<void>
+  stashAuthLogin: () => Promise<StashAuthStatus>
+  stashAuthLogout: () => Promise<StashAuthStatus>
+  stashAuthStatus: () => Promise<StashAuthStatus>
+  stashGetTabs: () => Promise<StashTabInfo[]>
+  stashTakeSnapshot: (tabIds?: string[]) => Promise<StashSnapshot>
+  stashGetSnapshots: (league?: string) => Promise<StashSnapshot[]>
+  stashDeleteSnapshot: (id: string) => Promise<StashSnapshot[]>
 }
 
 const api: PoeCheckApi = {
@@ -42,7 +52,14 @@ const api: PoeCheckApi = {
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),
   saveConfig: (partial) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, partial),
   getLeagues: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LEAGUES),
-  refreshCache: () => ipcRenderer.invoke(IPC_CHANNELS.REFRESH_CACHE)
+  refreshCache: () => ipcRenderer.invoke(IPC_CHANNELS.REFRESH_CACHE),
+  stashAuthLogin: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_LOGIN),
+  stashAuthLogout: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_LOGOUT),
+  stashAuthStatus: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_STATUS),
+  stashGetTabs: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_GET_TABS),
+  stashTakeSnapshot: (tabIds) => ipcRenderer.invoke(IPC_CHANNELS.STASH_TAKE_SNAPSHOT, tabIds),
+  stashGetSnapshots: (league) => ipcRenderer.invoke(IPC_CHANNELS.STASH_GET_SNAPSHOTS, league),
+  stashDeleteSnapshot: (id) => ipcRenderer.invoke(IPC_CHANNELS.STASH_DELETE_SNAPSHOT, id)
 }
 
 contextBridge.exposeInMainWorld('poeCheck', api)

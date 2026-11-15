@@ -5,6 +5,7 @@ import { ConfigStore } from './config'
 import { HotkeyManager } from './hotkeys'
 import { OverlayWindowManager } from './overlay'
 import { PoeApiClient } from './poeApi'
+import { StashService } from './stashService'
 
 let tray: Tray | null = null
 
@@ -53,6 +54,7 @@ async function main (): Promise<void> {
   const configStore = new ConfigStore()
   const overlay = new OverlayWindowManager()
   const poeApi = new PoeApiClient(() => configStore.get())
+  const stashService = new StashService(configStore, poeApi)
 
   const devUrl = process.env.VITE_DEV_SERVER_URL
   overlay.create(configStore.get().gameWindowTitle, devUrl)
@@ -77,7 +79,8 @@ async function main (): Promise<void> {
     (text) => {
       void handlePriceCheckText(text)
     },
-    () => overlay.hide()
+    () => overlay.hide(),
+    () => overlay.toggleApp()
   )
   hotkeys.start()
 
@@ -100,6 +103,13 @@ async function main (): Promise<void> {
     ])
   })
   ipcMain.handle(IPC_CHANNELS.SEARCH_TRADE, (_e, req: TradeSearchRequest) => poeApi.searchTrade(req))
+  ipcMain.handle(IPC_CHANNELS.STASH_AUTH_LOGIN, () => stashService.loginWithWindow())
+  ipcMain.handle(IPC_CHANNELS.STASH_AUTH_LOGOUT, () => stashService.logout())
+  ipcMain.handle(IPC_CHANNELS.STASH_AUTH_STATUS, () => stashService.getAuthStatus())
+  ipcMain.handle(IPC_CHANNELS.STASH_GET_TABS, () => stashService.getStashTabs())
+  ipcMain.handle(IPC_CHANNELS.STASH_TAKE_SNAPSHOT, (_e, tabIds?: string[]) => stashService.takeSnapshot(tabIds))
+  ipcMain.handle(IPC_CHANNELS.STASH_GET_SNAPSHOTS, (_e, league?: string) => stashService.getSnapshots(league))
+  ipcMain.handle(IPC_CHANNELS.STASH_DELETE_SNAPSHOT, (_e, id: string) => stashService.deleteSnapshot(id))
 
   // Auto-select active challenge league on first run, then warm up caches
   void (async () => {

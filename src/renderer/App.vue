@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { calcDefaultMinFilter } from '@shared/statMatcher'
+import StashWorkspace from './components/StashWorkspace.vue'
 import {
   DEFAULT_CONFIG,
   type AppConfig,
@@ -13,7 +14,7 @@ import {
 } from '@shared/types'
 
 const overlayVisible = ref(false)
-const overlayMode = ref<'price-check' | 'settings'>('price-check')
+const overlayMode = ref<'price-check' | 'app' | 'settings'>('price-check')
 const posX = ref(40)
 const posY = ref(0)
 const loading = ref(false)
@@ -263,6 +264,16 @@ function openTradeInBrowser (): void {
   }
 }
 
+async function handleWorkspaceSaveConfig (partial: Partial<AppConfig>): Promise<void> {
+  const saved = await window.poeCheck.saveConfig(partial)
+  config.value = saved
+  tradeStatus.value = saved.tradeStatus ?? 'available'
+}
+
+async function handleWorkspaceRefreshCache (): Promise<void> {
+  await window.poeCheck.refreshCache()
+}
+
 function hide (): void {
   window.poeCheck.hideOverlay()
 }
@@ -284,8 +295,11 @@ onMounted(async () => {
   unsubOverlay = window.poeCheck.onOverlayState((state: OverlayStatePayload) => {
     overlayVisible.value = state.visible
     if (state.mode) overlayMode.value = state.mode
-    if (state.mode === 'settings') {
-      void openSettings(true)
+    if (state.mode === 'app' || state.mode === 'settings') {
+      showSettings.value = false
+      void window.poeCheck.getLeagues().then((l) => {
+        if (l.length > 0) leagues.value = l
+      }).catch(() => undefined)
     } else if (state.mode === 'price-check') {
       showSettings.value = false
     }
@@ -312,9 +326,19 @@ onUnmounted(() => {
 
 <template>
   <div v-if="overlayVisible" class="backdrop" @click.self="hide">
+    <StashWorkspace
+      v-if="overlayMode === 'app' || overlayMode === 'settings'"
+      :config="config"
+      :leagues="leagues"
+      :initial-section="overlayMode === 'settings' ? 'settings' : 'stash'"
+      @close="hide"
+      @save-config="handleWorkspaceSaveConfig"
+      @refresh-cache="handleWorkspaceRefreshCache"
+    />
     <div
+      v-else
       class="card"
-      :class="{ centered: overlayMode === 'settings' || showSettings }"
+      :class="{ centered: showSettings }"
       :style="cardStyle"
     >
       <header class="topbar">

@@ -2,6 +2,7 @@ import { app, net } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { calcDefaultMinFilter, StatMatcher } from '../shared/statMatcher'
+import { classifyStashItem, type RawStashItem } from '../shared/stashValuation'
 import type {
   AppConfig,
   MatchedModifier,
@@ -339,7 +340,18 @@ export class PoeApiClient {
       'DivinationCard',
       'Scarab',
       'SkillGem',
-      'Map'
+      'Map',
+      'Essence',
+      'Oil',
+      'Incubator',
+      'DeliriumOrb',
+      'Catalyst',
+      'Fossil',
+      'Resonator',
+      'Vial',
+      'Artifact',
+      'Tattoo',
+      'Omen'
     ]
     await Promise.all(
       itemTypes.map(async (type) => {
@@ -408,6 +420,71 @@ export class PoeApiClient {
     this.ninjaLoadedLeague = cfg.league
     this.ninjaLoadedAt = now
     this.writeCache(cachePath, { entries: Array.from(map.entries()), divineChaosRate: divRate })
+  }
+
+  getDivineChaosRate (): number {
+    return this.divineChaosRate
+  }
+
+  async fetchPoeApi<T> (url: string, policyKey = 'stash-api'): Promise<T> {
+    return this.fetchJson<T>(url, undefined, false, policyKey)
+  }
+
+  priceRawStashItem (raw: RawStashItem): { unitChaos: number; key: string } {
+    const { category, rarity, links } = classifyStashItem(raw)
+    const displayName = raw.name ? `${raw.name} ${raw.typeLine}`.trim() : raw.typeLine
+    const cleanName = (raw.name || raw.typeLine || '').trim()
+    const cleanBase = (raw.baseType || raw.typeLine || '').trim()
+    const nameKey = cleanName.toLowerCase()
+    const baseKey = cleanBase.toLowerCase()
+
+    if (rarity === 'Currency' && nameKey === 'chaos orb') {
+      return { unitChaos: 1, key: 'currency::chaos orb' }
+    }
+
+    if (rarity === 'Gem') {
+      const lvlProp = raw.properties?.find((p) => p.name === 'Level')?.values?.[0]?.[0]
+      const qualProp = raw.properties?.find((p) => p.name === 'Quality')?.values?.[0]?.[0]
+      const lvl = lvlProp ? Number.parseInt(lvlProp, 10) || 1 : 1
+      const qual = qualProp ? Number.parseInt(qualProp.replace(/[^0-9]/g, ''), 10) || 0 : 0
+      const corr = raw.corrupted ? 1 : 0
+      const entry =
+        this.ninjaCache.get(`gem::${nameKey}::${lvl}::${qual}::${corr}`) ??
+        this.ninjaCache.get(`gem::${nameKey}::${lvl}::0::${corr}`) ??
+        this.ninjaCache.get(`gem::${nameKey}::1::0::0`)
+      return {
+        unitChaos: entry?.chaosValue ?? 0,
+        key: `gem::${nameKey}::${lvl}::${qual}::${corr}`
+      }
+    }
+
+    if (rarity === 'Unique') {
+      const linkBucket = links >= 5 ? links : 0
+      const entry =
+        this.ninjaCache.get(`unique::${nameKey}::${linkBucket}L`) ??
+        (linkBucket === 0 ? this.ninjaCache.get(nameKey) : undefined)
+      return {
+        unitChaos: entry?.chaosValue ?? 0,
+        key: `unique::${nameKey}::${linkBucket}L`
+      }
+    }
+
+    if (category === 'Map') {
+      const tierProp = raw.properties?.find((p) => p.name === 'Map Tier')?.values?.[0]?.[0]
+      const tier = tierProp ? Number.parseInt(tierProp, 10) || 0 : 0
+      const mapKey = `map::${baseKey}::t${tier}`
+      const entry = this.ninjaCache.get(mapKey) ?? this.ninjaCache.get(baseKey)
+      return {
+        unitChaos: entry?.chaosValue ?? 0,
+        key: mapKey
+      }
+    }
+
+    const entry = this.ninjaCache.get(nameKey) ?? this.ninjaCache.get(baseKey)
+    return {
+      unitChaos: entry?.chaosValue ?? 0,
+      key: `${category.toLowerCase()}::${displayName.toLowerCase()}`
+    }
   }
 
   private lookupNinja (item: ParsedItem): NinjaEntry | undefined {
@@ -765,13 +842,15 @@ export class PoeApiClient {
     }
   }
 
-  private async fetchJson<T> (url: string, init?: RequestInit, retried = false): Promise<T> {
+  private async fetchJson<T> (url: string, init?: RequestInit, retried = false, explicitPolicyKey?: string): Promise<T> {
     const cfg = this.getConfig()
-    const policyKey = url.includes('/api/trade/search/')
-      ? 'trade-search'
-      : url.includes('/api/trade/fetch/')
-        ? 'trade-fetch'
-        : ''
+    const policyKey = explicitPolicyKey ?? (
+      url.includes('/api/trade/search/')
+        ? 'trade-search'
+        : url.includes('/api/trade/fetch/')
+          ? 'trade-fetch'
+          : ''
+    )
 
     if (policyKey) {
       await this.rateLimiter.acquire(policyKey)
@@ -800,7 +879,7 @@ export class PoeApiClient {
       const retryAfter = Number.parseInt(res.headers.get('retry-after') ?? '0', 10) || 2
       if (!retried && retryAfter <= 5) {
         await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000))
-        return this.fetchJson<T>(url, init, true)
+        return this.fetchJson<T>(url, init, true, explicitPolicyKey)
       }
       throw new Error(`Rate limited by PoE Trade API (retry in ${retryAfter}s)`)
     }

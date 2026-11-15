@@ -185,7 +185,8 @@ export class HotkeyManager {
     private readonly isGameActive: () => boolean,
     private readonly isOverlayOpen: () => boolean,
     private readonly onPriceCheckText: (text: string) => void,
-    private readonly onCloseOverlay: () => void
+    private readonly onCloseOverlay: () => void,
+    private readonly onToggleApp: () => void
   ) {}
 
   start (): void {
@@ -194,6 +195,13 @@ export class HotkeyManager {
 
     uIOhook.on('keydown', (e) => {
       const cfg = this.getConfig()
+
+      if (matchesShortcut(e, this.getParsed(cfg.toggleAppHotkey))) {
+        if (this.isOverlayOpen() || this.isGameActive()) {
+          this.onToggleApp()
+          return
+        }
+      }
 
       if (this.isOverlayOpen()) {
         if (matchesShortcut(e, this.getParsed(cfg.closeHotkey))) {

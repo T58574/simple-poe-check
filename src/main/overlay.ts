@@ -7,6 +7,7 @@ export class OverlayWindowManager {
   private win: BrowserWindow | null = null
   private gameActive = false
   private overlayVisible = false
+  private currentMode: 'price-check' | 'app' | 'settings' = 'price-check'
   private attached = false
   private adminWarned = false
 
@@ -21,8 +22,9 @@ export class OverlayWindowManager {
   create (gameTitle: string, devServerUrl?: string): BrowserWindow {
     this.win = new BrowserWindow({
       ...OVERLAY_WINDOW_OPTS,
-      width: 800,
-      height: 600,
+      show: false,
+      width: 1120,
+      height: 760,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
@@ -83,6 +85,7 @@ export class OverlayWindowManager {
     const x = dockLeft ? 0 : Math.max(0, bounds.width - width)
 
     this.overlayVisible = true
+    this.currentMode = 'price-check'
     this.sendState({ visible: true, mode: 'price-check', x, y: 0 })
     if (this.attached) {
       this.gameActive = false
@@ -93,10 +96,11 @@ export class OverlayWindowManager {
     }
   }
 
-  showStandalone (): void {
+  showApp (mode: 'app' | 'settings' = 'app'): void {
     if (!this.win) return
     this.overlayVisible = true
-    this.sendState({ visible: true, mode: 'settings' })
+    this.currentMode = mode
+    this.sendState({ visible: true, mode })
     if (this.attached) {
       this.gameActive = false
       OverlayController.activateOverlay()
@@ -105,6 +109,18 @@ export class OverlayWindowManager {
       this.win.show()
       this.win.focus()
     }
+  }
+
+  toggleApp (): void {
+    if (this.overlayVisible && (this.currentMode === 'app' || this.currentMode === 'settings')) {
+      this.hide()
+    } else {
+      this.showApp('app')
+    }
+  }
+
+  showStandalone (): void {
+    this.showApp('settings')
   }
 
   hide (): void {
