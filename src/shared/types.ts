@@ -319,5 +319,6 @@ export const IPC_CHANNELS = {
   STASH_GET_TABS: 'stash:get-tabs',
   STASH_TAKE_SNAPSHOT: 'stash:take-snapshot',
   STASH_GET_SNAPSHOTS: 'stash:get-snapshots',
-  STASH_DELETE_SNAPSHOT: 'stash:delete-snapshot'
+  STASH_DELETE_SNAPSHOT: 'stash:delete-snapshot',
+  STASH_POP_OUT: 'stash:pop-out'
 } as const

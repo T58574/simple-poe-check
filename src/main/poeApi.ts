@@ -17,7 +17,8 @@ import type {
 
 const USER_AGENT = 'SimplePoeCheck/0.2.0 (desktop overlay)'
 const POE_API_BASE = 'https://www.pathofexile.com/api/trade'
-const NINJA_API_BASE = 'https://poe.ninja/api/data'
+const NINJA_EXCHANGE_BASE = 'https://poe.ninja/poe1/api/economy/exchange/current/overview'
+const NINJA_STASH_ITEM_BASE = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview'
 
 const TRADE_CURRENCY_TO_NAME: Record<string, string> = {
   chaos: 'chaos orb',
@@ -292,13 +293,13 @@ export class PoeApiClient {
       return
     }
 
-    const cachePath = path.join(this.cacheDir, `ninja-v2-${sanitizeFilename(cfg.league)}.json`)
+    const cachePath = path.join(this.cacheDir, `ninja-v3-${sanitizeFilename(cfg.league)}.json`)
     if (!forceRefresh) {
       const cached = this.readCache<{ entries: Array<[string, NinjaEntry]>; divineChaosRate: number }>(
         cachePath,
         ttlMs
       )
-      if (cached) {
+      if (cached && cached.entries.length > 0) {
         this.ninjaCache = new Map(cached.entries)
         this.divineChaosRate = cached.divineChaosRate
         this.ninjaLoadedLeague = cfg.league
@@ -310,27 +311,61 @@ export class PoeApiClient {
     const map = new Map<string, NinjaEntry>()
     let divRate = 0
 
-    // Currency & Fragments
-    for (const type of ['Currency', 'Fragment']) {
-      try {
-        const res = await this.fetchJson<{
-          lines: Array<{ currencyTypeName: string; chaosEquivalent: number }>
-        }>(`${NINJA_API_BASE}/currencyoverview?league=${encodeURIComponent(cfg.league)}&type=${type}`)
-        for (const line of res.lines) {
-          if (line.currencyTypeName === 'Divine Orb') {
-            divRate = line.chaosEquivalent
-          }
-          map.set(line.currencyTypeName.toLowerCase(), {
-            name: line.currencyTypeName,
-            chaosValue: line.chaosEquivalent
-          })
-        }
-      } catch {
-        // Ignore individual ninja category failures
-      }
-    }
+    // Exchange categories (Currency, Fragments, Scarabs, Essences, Oils, Fossils, etc.)
+    const exchangeTypes = [
+      'Currency',
+      'Fragment',
+      'Scarab',
+      'Essence',
+      'Oil',
+      'Fossil',
+      'Resonator',
+      'Catalyst',
+      'DeliriumOrb',
+      'Incubator',
+      'Tattoo',
+      'Omen',
+      'Artifact',
+      'Vial'
+    ]
+    await Promise.all(
+      exchangeTypes.map(async (type) => {
+        try {
+          const res = await this.fetchJson<{
+            core?: { rates?: { divine?: number } }
+            items?: Array<{ id: string; name: string }>
+            lines?: Array<{ id: string; primaryValue: number }>
+          }>(`${NINJA_EXCHANGE_BASE}?league=${encodeURIComponent(cfg.league)}&type=${type}`)
 
-    // Items
+          const idToName = new Map<string, string>()
+          for (const it of res.items ?? []) {
+            idToName.set(it.id, it.name)
+          }
+
+          if (divRate === 0 && res.core?.rates?.divine && res.core.rates.divine > 0) {
+            divRate = Number((1 / res.core.rates.divine).toFixed(2))
+          }
+
+          for (const line of res.lines ?? []) {
+            const name = idToName.get(line.id) ?? line.id
+            const key = name.toLowerCase()
+            if (line.id === 'divine' || key === 'divine orb') {
+              divRate = line.primaryValue
+            }
+            if (!map.has(key)) {
+              map.set(key, {
+                name,
+                chaosValue: line.primaryValue
+              })
+            }
+          }
+        } catch {
+          // Ignore individual exchange category failures
+        }
+      })
+    )
+
+    // Stash Items (Uniques, Divination Cards, Skill Gems, Maps)
     const itemTypes = [
       'UniqueWeapon',
       'UniqueArmour',
@@ -338,20 +373,8 @@ export class PoeApiClient {
       'UniqueFlask',
       'UniqueJewel',
       'DivinationCard',
-      'Scarab',
       'SkillGem',
-      'Map',
-      'Essence',
-      'Oil',
-      'Incubator',
-      'DeliriumOrb',
-      'Catalyst',
-      'Fossil',
-      'Resonator',
-      'Vial',
-      'Artifact',
-      'Tattoo',
-      'Omen'
+      'Map'
     ]
     await Promise.all(
       itemTypes.map(async (type) => {
@@ -367,7 +390,7 @@ export class PoeApiClient {
               corrupted?: boolean
               mapTier?: number
             }>
-          }>(`${NINJA_API_BASE}/itemoverview?league=${encodeURIComponent(cfg.league)}&type=${type}`)
+          }>(`${NINJA_STASH_ITEM_BASE}?league=${encodeURIComponent(cfg.league)}&type=${type}`)
 
           const nameCounts = new Map<string, number>()
           for (const line of res.lines) {
@@ -419,7 +442,9 @@ export class PoeApiClient {
     this.divineChaosRate = divRate
     this.ninjaLoadedLeague = cfg.league
     this.ninjaLoadedAt = now
-    this.writeCache(cachePath, { entries: Array.from(map.entries()), divineChaosRate: divRate })
+    if (map.size > 0) {
+      this.writeCache(cachePath, { entries: Array.from(map.entries()), divineChaosRate: divRate })
+    }
   }
 
   getDivineChaosRate (): number {

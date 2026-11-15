@@ -114,6 +114,7 @@ async function main (): Promise<void> {
   ipcMain.handle(IPC_CHANNELS.STASH_TAKE_SNAPSHOT, (_e, tabIds?: string[]) => stashService.takeSnapshot(tabIds))
   ipcMain.handle(IPC_CHANNELS.STASH_GET_SNAPSHOTS, (_e, league?: string) => stashService.getSnapshots(league))
   ipcMain.handle(IPC_CHANNELS.STASH_DELETE_SNAPSHOT, (_e, id: string) => stashService.deleteSnapshot(id))
+  ipcMain.on(IPC_CHANNELS.STASH_POP_OUT, () => overlay.openDetachedApp())
 
   // Auto-select active challenge league on first run, then warm up caches
   void (async () => {

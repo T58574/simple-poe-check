@@ -1033,3 +1033,21 @@ button.mini-btn {
 .ws-auth-sess {
   flex: 1;
 }
+
+.ws-shell.detached {
+  inset: 0;
+  max-width: none;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.ws-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ws-table th.sortable:hover {
+  color: var(--text);
+}

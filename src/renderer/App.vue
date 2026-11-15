@@ -13,8 +13,9 @@ import {
   type TradeStatusOption
 } from '@shared/types'
 
-const overlayVisible = ref(false)
-const overlayMode = ref<'price-check' | 'app' | 'settings'>('price-check')
+const isDetached = new URLSearchParams(window.location.search).get('detached') === '1'
+const overlayVisible = ref(isDetached)
+const overlayMode = ref<'price-check' | 'app' | 'settings'>(isDetached ? 'app' : 'price-check')
 const posX = ref(40)
 const posY = ref(0)
 const loading = ref(false)
@@ -276,6 +277,10 @@ async function handleWorkspaceRefreshCache (): Promise<void> {
 }
 
 function hide (): void {
+  if (isDetached) {
+    window.close()
+    return
+  }
   window.poeCheck.hideOverlay()
 }
 
@@ -293,6 +298,11 @@ function formatAge (iso: string): string {
 onMounted(async () => {
   config.value = await window.poeCheck.getConfig()
   tradeStatus.value = config.value.tradeStatus ?? 'available'
+  if (isDetached) {
+    void window.poeCheck.getLeagues().then((l) => {
+      if (l.length > 0) leagues.value = l
+    }).catch(() => undefined)
+  }
   unsubOverlay = window.poeCheck.onOverlayState((state: OverlayStatePayload) => {
     overlayVisible.value = state.visible
     if (state.mode) overlayMode.value = state.mode
@@ -331,6 +341,7 @@ onUnmounted(() => {
       v-if="overlayMode === 'app' || overlayMode === 'settings'"
       :config="config"
       :leagues="leagues"
+      :detached="isDetached"
       :initial-section="overlayMode === 'settings' ? 'settings' : 'stash'"
       @close="hide"
       @save-config="handleWorkspaceSaveConfig"
