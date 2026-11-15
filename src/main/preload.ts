@@ -50,7 +50,7 @@ const api: PoeCheckApi = {
   hideOverlay: () => ipcRenderer.send(IPC_CHANNELS.HIDE_OVERLAY),
   openExternal: (url) => ipcRenderer.send(IPC_CHANNELS.OPEN_EXTERNAL, url),
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),
-  saveConfig: (partial) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, partial),
+  saveConfig: (partial) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, JSON.parse(JSON.stringify(partial))),
   getLeagues: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LEAGUES),
   refreshCache: () => ipcRenderer.invoke(IPC_CHANNELS.REFRESH_CACHE),
   stashAuthLogin: (poeSessId, accountName) =>
@@ -58,7 +58,8 @@ const api: PoeCheckApi = {
   stashAuthLogout: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_LOGOUT),
   stashAuthStatus: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_STATUS),
   stashGetTabs: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_GET_TABS),
-  stashTakeSnapshot: (tabIds) => ipcRenderer.invoke(IPC_CHANNELS.STASH_TAKE_SNAPSHOT, tabIds),
+  stashTakeSnapshot: (tabIds) =>
+    ipcRenderer.invoke(IPC_CHANNELS.STASH_TAKE_SNAPSHOT, tabIds ? JSON.parse(JSON.stringify(tabIds)) : undefined),
   stashGetSnapshots: (league) => ipcRenderer.invoke(IPC_CHANNELS.STASH_GET_SNAPSHOTS, league),
   stashDeleteSnapshot: (id) => ipcRenderer.invoke(IPC_CHANNELS.STASH_DELETE_SNAPSHOT, id)
 }
