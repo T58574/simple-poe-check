@@ -48,9 +48,8 @@ const cardStyle = computed(() => {
   }
   return {
     left: `${posX.value}px`,
-    top: `${posY.value}px`,
-    width: `${config.value.overlayWidth}px`,
-    maxHeight: `${config.value.overlayMaxHeight}px`
+    top: '0px',
+    width: `${config.value.overlayWidth}px`
   }
 })
 
@@ -313,125 +312,127 @@ onUnmounted(() => {
         </section>
 
         <template v-else-if="result">
-          <div v-if="result.error" class="error-box">{{ result.error }}</div>
+          <div class="mods-scroll">
+            <div v-if="result.error" class="error-box">{{ result.error }}</div>
 
-          <div v-if="result.source === 'ninja' && result.chaosValue !== undefined" class="price-banner">
-            <div>
-              <div class="price-main">{{ result.chaosValue }} c</div>
-              <div v-if="result.divineValue" class="price-sub">~{{ result.divineValue }} div</div>
-            </div>
-            <span class="price-sub">poe.ninja</span>
-          </div>
-
-          <!-- Weapon computed stats -->
-          <div v-if="result.item.weapon" class="mod-list">
-            <div class="mod-row" :class="{ checked: weaponEnabled.dps }">
-              <label class="mod-left">
-                <input v-model="weaponEnabled.dps" type="checkbox" />
-                <span class="mod-text">Total DPS: <b>{{ result.item.weapon.totalDps }}</b></span>
-              </label>
-              <div class="mod-inputs">
-                <input v-model.number="weaponMins.dps" type="number" class="num-input" />
+            <div v-if="result.source === 'ninja' && result.chaosValue !== undefined" class="price-banner">
+              <div>
+                <div class="price-main">{{ result.chaosValue }} c</div>
+                <div v-if="result.divineValue" class="price-sub">~{{ result.divineValue }} div</div>
               </div>
+              <span class="price-sub">poe.ninja</span>
             </div>
 
-            <div v-if="result.item.weapon.physicalDps > 0" class="mod-row" :class="{ checked: weaponEnabled.pdps }">
-              <label class="mod-left">
-                <input v-model="weaponEnabled.pdps" type="checkbox" />
-                <span class="mod-text">Physical DPS: <b>{{ result.item.weapon.physicalDps }}</b></span>
-              </label>
-              <div class="mod-inputs">
-                <input v-model.number="weaponMins.pdps" type="number" class="num-input" />
-              </div>
-            </div>
-
-            <div class="mod-row" :class="{ checked: weaponEnabled.aps }">
-              <label class="mod-left">
-                <input v-model="weaponEnabled.aps" type="checkbox" />
-                <span class="mod-text">Attacks per Second: <b>{{ result.item.weapon.aps }}</b></span>
-              </label>
-              <div class="mod-inputs">
-                <input v-model.number="weaponMins.aps" type="number" step="0.01" class="num-input" />
-              </div>
-            </div>
-
-            <div v-if="result.item.weapon.crit > 0" class="mod-row" :class="{ checked: weaponEnabled.crit }">
-              <label class="mod-left">
-                <input v-model="weaponEnabled.crit" type="checkbox" />
-                <span class="mod-text">Critical Strike Chance: <b>{{ result.item.weapon.crit }}%</b></span>
-              </label>
-              <div class="mod-inputs">
-                <input v-model.number="weaponMins.crit" type="number" step="0.1" class="num-input" />
-              </div>
-            </div>
-          </div>
-
-          <!-- Armour computed stats -->
-          <div v-if="result.item.armour" class="mod-list">
-            <div v-if="result.item.armour.armour > 0" class="mod-row" :class="{ checked: armourEnabled.ar }">
-              <label class="mod-left">
-                <input v-model="armourEnabled.ar" type="checkbox" />
-                <span class="mod-text">Armour: <b>{{ result.item.armour.armour }}</b></span>
-              </label>
-              <input v-model.number="armourMins.ar" type="number" class="num-input" />
-            </div>
-            <div v-if="result.item.armour.evasion > 0" class="mod-row" :class="{ checked: armourEnabled.ev }">
-              <label class="mod-left">
-                <input v-model="armourEnabled.ev" type="checkbox" />
-                <span class="mod-text">Evasion: <b>{{ result.item.armour.evasion }}</b></span>
-              </label>
-              <input v-model.number="armourMins.ev" type="number" class="num-input" />
-            </div>
-            <div v-if="result.item.armour.energyShield > 0" class="mod-row" :class="{ checked: armourEnabled.es }">
-              <label class="mod-left">
-                <input v-model="armourEnabled.es" type="checkbox" />
-                <span class="mod-text">Energy Shield: <b>{{ result.item.armour.energyShield }}</b></span>
-              </label>
-              <input v-model.number="armourMins.es" type="number" class="num-input" />
-            </div>
-          </div>
-
-          <!-- Modifiers -->
-          <div v-if="result.matchedMods.length > 0" class="mod-list">
-            <div
-              v-for="(mod, idx) in result.matchedMods"
-              :key="idx"
-              class="mod-row"
-              :class="{
-                checked: enabledMods.has(idx),
-                unmatched: !mod.statId
-              }"
-            >
-              <label class="mod-left">
-                <input
-                  type="checkbox"
-                  :disabled="!mod.statId"
-                  :checked="enabledMods.has(idx)"
-                  @change="toggleMod(idx, mod.statId)"
-                />
-                <div class="mod-text-wrap">
-                  <span class="mod-text">{{ mod.modifier.display }}</span>
-                  <div class="badge-row">
-                    <span class="badge" :class="`kind-${mod.modifier.kind}`">
-                      {{ mod.modifier.kind }}
-                    </span>
-                    <span
-                      v-if="mod.modifier.tier"
-                      class="badge"
-                      :class="{ 'tier-top': mod.modifier.tier <= 2 }"
-                    >
-                      Tier {{ mod.modifier.tier }}
-                    </span>
-                  </div>
+            <!-- Weapon computed stats -->
+            <div v-if="result.item.weapon" class="mod-list">
+              <div class="mod-row" :class="{ checked: weaponEnabled.dps }">
+                <label class="mod-left">
+                  <input v-model="weaponEnabled.dps" type="checkbox" />
+                  <span class="mod-text">Total DPS: <b>{{ result.item.weapon.totalDps }}</b></span>
+                </label>
+                <div class="mod-inputs">
+                  <input v-model.number="weaponMins.dps" type="number" class="num-input" />
                 </div>
-              </label>
-              <div v-if="mod.statId && mod.modifier.values.length > 0" class="mod-inputs">
-                <input v-model.number="modMins[idx]" type="number" class="num-input" />
+              </div>
+
+              <div v-if="result.item.weapon.physicalDps > 0" class="mod-row" :class="{ checked: weaponEnabled.pdps }">
+                <label class="mod-left">
+                  <input v-model="weaponEnabled.pdps" type="checkbox" />
+                  <span class="mod-text">Physical DPS: <b>{{ result.item.weapon.physicalDps }}</b></span>
+                </label>
+                <div class="mod-inputs">
+                  <input v-model.number="weaponMins.pdps" type="number" class="num-input" />
+                </div>
+              </div>
+
+              <div class="mod-row" :class="{ checked: weaponEnabled.aps }">
+                <label class="mod-left">
+                  <input v-model="weaponEnabled.aps" type="checkbox" />
+                  <span class="mod-text">Attacks per Second: <b>{{ result.item.weapon.aps }}</b></span>
+                </label>
+                <div class="mod-inputs">
+                  <input v-model.number="weaponMins.aps" type="number" step="0.01" class="num-input" />
+                </div>
+              </div>
+
+              <div v-if="result.item.weapon.crit > 0" class="mod-row" :class="{ checked: weaponEnabled.crit }">
+                <label class="mod-left">
+                  <input v-model="weaponEnabled.crit" type="checkbox" />
+                  <span class="mod-text">Critical Strike Chance: <b>{{ result.item.weapon.crit }}%</b></span>
+                </label>
+                <div class="mod-inputs">
+                  <input v-model.number="weaponMins.crit" type="number" step="0.1" class="num-input" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Armour computed stats -->
+            <div v-if="result.item.armour" class="mod-list">
+              <div v-if="result.item.armour.armour > 0" class="mod-row" :class="{ checked: armourEnabled.ar }">
+                <label class="mod-left">
+                  <input v-model="armourEnabled.ar" type="checkbox" />
+                  <span class="mod-text">Armour: <b>{{ result.item.armour.armour }}</b></span>
+                </label>
+                <input v-model.number="armourMins.ar" type="number" class="num-input" />
+              </div>
+              <div v-if="result.item.armour.evasion > 0" class="mod-row" :class="{ checked: armourEnabled.ev }">
+                <label class="mod-left">
+                  <input v-model="armourEnabled.ev" type="checkbox" />
+                  <span class="mod-text">Evasion: <b>{{ result.item.armour.evasion }}</b></span>
+                </label>
+                <input v-model.number="armourMins.ev" type="number" class="num-input" />
+              </div>
+              <div v-if="result.item.armour.energyShield > 0" class="mod-row" :class="{ checked: armourEnabled.es }">
+                <label class="mod-left">
+                  <input v-model="armourEnabled.es" type="checkbox" />
+                  <span class="mod-text">Energy Shield: <b>{{ result.item.armour.energyShield }}</b></span>
+                </label>
+                <input v-model.number="armourMins.es" type="number" class="num-input" />
+              </div>
+            </div>
+
+            <!-- Modifiers -->
+            <div v-if="result.matchedMods.length > 0" class="mod-list">
+              <div
+                v-for="(mod, idx) in result.matchedMods"
+                :key="idx"
+                class="mod-row"
+                :class="{
+                  checked: enabledMods.has(idx),
+                  unmatched: !mod.statId
+                }"
+              >
+                <label class="mod-left">
+                  <input
+                    type="checkbox"
+                    :disabled="!mod.statId"
+                    :checked="enabledMods.has(idx)"
+                    @change="toggleMod(idx, mod.statId)"
+                  />
+                  <div class="mod-text-wrap">
+                    <span class="mod-text">{{ mod.modifier.display }}</span>
+                    <div class="badge-row">
+                      <span class="badge" :class="`kind-${mod.modifier.kind}`">
+                        {{ mod.modifier.kind }}
+                      </span>
+                      <span
+                        v-if="mod.modifier.tier"
+                        class="badge"
+                        :class="{ 'tier-top': mod.modifier.tier <= 2 }"
+                      >
+                        Tier {{ mod.modifier.tier }}
+                      </span>
+                    </div>
+                  </div>
+                </label>
+                <div v-if="mod.statId && mod.modifier.values.length > 0" class="mod-inputs">
+                  <input v-model.number="modMins[idx]" type="number" class="num-input" />
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Search & Trade link -->
+          <!-- Search & Trade link (pinned) -->
           <div v-if="result.source === 'trade' || result.matchedMods.length > 0" class="search-bar">
             <button class="primary" :disabled="loading" @click="runSearch">
               {{ loading ? 'Searching...' : 'Search' }}
@@ -441,16 +442,18 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <!-- Listings -->
-          <div v-if="loading" class="empty-state">Searching PoE Trade...</div>
-          <div v-else-if="result.listings.length > 0" class="listings">
-            <div v-for="(l, idx) in result.listings" :key="idx" class="listing-row">
-              <span class="listing-price">{{ l.amount }} {{ l.currency }}</span>
-              <span class="listing-meta">{{ l.accountName }} · {{ formatAge(l.indexed) }}</span>
+          <!-- Listings (pinned bottom pane) -->
+          <div class="listings-section">
+            <div v-if="loading" class="empty-state">Searching PoE Trade...</div>
+            <div v-else-if="result.listings.length > 0" class="listings">
+              <div v-for="(l, idx) in result.listings" :key="idx" class="listing-row">
+                <span class="listing-price">{{ l.amount }} {{ l.currency }}</span>
+                <span class="listing-meta">{{ l.accountName }} · {{ formatAge(l.indexed) }}</span>
+              </div>
             </div>
-          </div>
-          <div v-else-if="result.source === 'trade' && !result.error" class="empty-state">
-            No matching listings found.
+            <div v-else-if="result.source === 'trade' && !result.error" class="empty-state">
+              No matching listings found.
+            </div>
           </div>
         </template>
 

@@ -60,7 +60,7 @@ export class OverlayWindowManager {
     return this.win
   }
 
-  showAtCursor (width: number, height: number): void {
+  showAtCursor (width: number, _height: number): void {
     if (!this.win) return
     const cursor = screen.getCursorScreenPoint()
     const target = OverlayController.targetBounds
@@ -68,13 +68,12 @@ export class OverlayWindowManager {
       ? target
       : screen.getDisplayNearestPoint(cursor).workArea
 
-    const relX = cursor.x - bounds.x + 16
-    const relY = cursor.y - bounds.y - 24
-    const x = Math.min(Math.max(relX, 8), Math.max(8, bounds.width - width - 8))
-    const y = Math.min(Math.max(relY, 8), Math.max(8, bounds.height - height - 8))
+    const cursorRelX = cursor.x - bounds.x
+    const dockLeft = cursorRelX > bounds.width / 2
+    const x = dockLeft ? 0 : Math.max(0, bounds.width - width)
 
     this.overlayVisible = true
-    this.sendState({ visible: true, mode: 'price-check', x, y })
+    this.sendState({ visible: true, mode: 'price-check', x, y: 0 })
     if (this.attached) {
       this.gameActive = false
       OverlayController.activateOverlay()

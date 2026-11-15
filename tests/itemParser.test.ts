@@ -147,3 +147,28 @@ Adds 82(77-104) to 161(154-178) Cold Damage
   assert.equal(item.modifiers[3].display, '+35% to Global Critical Strike Multiplier')
   assert.equal(item.modifiers[3].tier, 1)
 })
+
+test('StatMatcher prefers (Local) stats for weapons/armour and Global for accessories', () => {
+  const matcher = new StatMatcher([
+    { id: 'explicit.stat_681332047', text: '#% increased Attack Speed', type: 'explicit' },
+    { id: 'explicit.stat_210067635', text: '#% increased Attack Speed (Local)', type: 'explicit' }
+  ])
+
+  const weaponItem = parseItemText(`Item Class: Warstaves
+Rarity: Rare
+Test Staff
+Foul Staff
+--------
+26% increased Attack Speed`)
+
+  const ringItem = parseItemText(`Item Class: Rings
+Rarity: Rare
+Test Ring
+Iron Ring
+--------
+6% increased Attack Speed`)
+
+  assert.ok(weaponItem && ringItem)
+  assert.equal(matcher.matchModifier(weaponItem.modifiers[0], { isLocalItem: true }).statId, 'explicit.stat_210067635')
+  assert.equal(matcher.matchModifier(ringItem.modifiers[0], { isLocalItem: false }).statId, 'explicit.stat_681332047')
+})

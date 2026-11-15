@@ -47,10 +47,11 @@ body,
   display: flex;
   flex-direction: column;
   width: 440px;
-  max-height: 620px;
+  height: 100vh;
+  max-height: 100vh;
   background: var(--bg);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.78);
   overflow: hidden;
 }
@@ -58,6 +59,10 @@ body,
 .card.centered {
   top: 50%;
   left: 50%;
+  height: auto;
+  max-height: 560px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
   transform: translate(-50%, -50%);
 }
 
@@ -176,11 +181,32 @@ button.icon-btn {
 
 .body {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.mods-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.listings-section {
+  flex: 0 1 42%;
+  min-height: 120px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .price-banner {

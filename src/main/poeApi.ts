@@ -190,7 +190,10 @@ export class PoeApiClient {
       }
     }
 
-    const matchedMods: MatchedModifier[] = this.matcher ? this.matcher.matchAll(item.modifiers) : []
+    const isLocalItem = Boolean(item.weapon || item.armour)
+    const matchedMods: MatchedModifier[] = this.matcher
+      ? this.matcher.matchAll(item.modifiers, { isLocalItem })
+      : []
 
     // Fast path via poe.ninja for Currency, Divination Card, Unique, Gem
     if (
@@ -252,14 +255,30 @@ export class PoeApiClient {
     existingMatchedMods?: MatchedModifier[]
   ): Promise<PriceCheckResult> {
     const cfg = this.getConfig()
+    const isLocalItem = Boolean(req.item.weapon || req.item.armour)
     const matchedMods =
-      existingMatchedMods ?? (this.matcher ? this.matcher.matchAll(req.item.modifiers) : [])
+      existingMatchedMods ??
+      (this.matcher ? this.matcher.matchAll(req.item.modifiers, { isLocalItem }) : [])
 
-    const statFilters = req.filters.map((f) => ({
-      id: f.statId,
+    // Merge duplicate statIds (e.g. hybrid % increased Physical Damage mods) by summing mins
+    const mergedMap = new Map<string, { min?: number; max?: number }>()
+    for (const f of req.filters) {
+      const prev = mergedMap.get(f.statId)
+      if (!prev) {
+        mergedMap.set(f.statId, { min: f.min, max: f.max })
+      } else {
+        mergedMap.set(f.statId, {
+          min: prev.min !== undefined && f.min !== undefined ? prev.min + f.min : (prev.min ?? f.min),
+          max: prev.max !== undefined && f.max !== undefined ? prev.max + f.max : (prev.max ?? f.max)
+        })
+      }
+    }
+
+    const statFilters = Array.from(mergedMap.entries()).map(([statId, range]) => ({
+      id: statId,
       disabled: false,
-      value: f.min !== undefined || f.max !== undefined
-        ? { min: f.min, max: f.max }
+      value: range.min !== undefined || range.max !== undefined
+        ? { min: range.min, max: range.max }
         : undefined
     }))
 
