@@ -1,6 +1,6 @@
 # Project Journal
 
-- `last_updated`: `2026-11-15T22:48:59Z`
+- `last_updated`: `2026-11-15T22:56:38Z`
 - `scope`: `simple-poe-check` (Electron + Vue 3 Path of Exile price checker, stash tracker, farm profit analyzer, and bulk listing overlay)
 - `owner`: project maintainers
 
@@ -8,7 +8,8 @@
 - **2026-11-15** | Overlay app (`Ctrl+Space`, hidden on startup via `show: false`) and cursor price-check (`Ctrl+D`) are integrated in `src/main/overlay.ts`, `src/main/hotkeys.ts`, and `src/renderer/App.vue` | `verified-earlier` | `npm test` (11/11) and `npm run build` passed on commit `69bc55a`.
 - **2026-11-15** | Stash scanning uses `character-window/get-stash-items` via `PoeApiClient` (`PolicyRateLimiter`) and prices items locally against `poe.ninja` categories without hitting Trade API | `verified-earlier` | `npm run build` passed; live GGG stash API response not yet tested in runtime.
 - **2026-11-15** | Snapshots, farm-session `chaos/hr` & `div/hr` diffs, and bulk aggregation are implemented in `src/shared/stashValuation.ts` and persisted locally in `userData/stash-snapshots.json` (max 100) | `verified-earlier` | Unit-tested in `tests/stashValuation.test.ts`.
-- **2026-11-15** | Stash auth opens `https://www.pathofexile.com/login` in the active system browser (`shell.openExternal`) with an inline `POESESSID` + optional `Account Name` paste bar (`src/main/stashService.ts`, `src/renderer/components/StashWorkspace.vue`) | `verified-earlier` | Replaced earlier Electron `BrowserWindow` cookie capture (superseded 2026-11-15).
+- **2026-11-15** | Stash auth (`POESESSID`), `/api/profile` account resolution, and `character-window/get-stash-items` tab listing verified working live in Path of Exile overlay | `verified-this-turn` | User screenshot confirmed account resolution and colored tab list.
+- **2026-11-15** | Fixed `An object could not be cloned.` on `Take Snapshot` / `Save Config` by stripping Vue 3 reactive Proxies via `JSON.parse(JSON.stringify(...))` in `src/main/preload.ts` | `verified-this-turn` | `npm test` (11/11) and `npm run build` passed.
 
 ## Active Decisions
 - **2026-11-15** | **POESESSID over OAuth 2.1 for now** | GGG OAuth registration requires manual approval (`oauth@grindinggear.com`) and user prefers not to scaffold OAuth yet | `verified-earlier` | Next review: if GGG restricts `character-window` or user registers an OAuth client.
@@ -31,4 +32,4 @@
 - None tracked.
 
 ## Verification Log
-- **2026-11-15** | `npm test && npm run build` | 11/11 tests passed (`tests/itemParser.test.ts`, `tests/stashValuation.test.ts`); renderer and main builds succeeded (`69bc55a`) | `verified-earlier`.
+- **2026-11-15** | `npm test && npm run build` | 11/11 tests passed; renderer and main builds succeeded after `preload.ts` IPC clone fix | `verified-this-turn`.
