@@ -53,7 +53,12 @@ async function main (): Promise<void> {
   ipcMain.handle(IPC_CHANNELS.SAVE_CONFIG, (_e, partial: Partial<AppConfig>) => configStore.save(partial))
   ipcMain.handle(IPC_CHANNELS.GET_LEAGUES, () => poeApi.getLeagues())
   ipcMain.handle(IPC_CHANNELS.REFRESH_CACHE, async () => {
-    await Promise.all([poeApi.ensureStatsLoaded(true), poeApi.ensureNinjaLoaded(true)])
+    poeApi.clearSearchCache()
+    await Promise.all([
+      poeApi.getLeagues(true),
+      poeApi.ensureStatsLoaded(true),
+      poeApi.ensureNinjaLoaded(true)
+    ])
   })
   ipcMain.handle(IPC_CHANNELS.SEARCH_TRADE, (_e, req: TradeSearchRequest) => poeApi.searchTrade(req))
 

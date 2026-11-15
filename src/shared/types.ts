@@ -127,6 +127,7 @@ export interface AppConfig {
   closeHotkey: string
   ninjaCacheTtlMinutes: number
   statsCacheTtlHours: number
+  tradeCacheTtlMinutes: number
   requestTimeoutMs: number
   overlayWidth: number
   overlayMaxHeight: number
@@ -139,8 +140,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   priceCheckHotkey: 'Ctrl+D',
   hideoutHotkey: 'F5',
   closeHotkey: 'Escape',
-  ninjaCacheTtlMinutes: 30,
+  ninjaCacheTtlMinutes: 60,
   statsCacheTtlHours: 24,
+  tradeCacheTtlMinutes: 5,
   requestTimeoutMs: 8000,
   overlayWidth: 440,
   overlayMaxHeight: 620

@@ -119,6 +119,7 @@ class PolicyRateLimiter {
 export class PoeApiClient {
   private readonly cacheDir: string
   private matcher: StatMatcher | null = null
+  private leaguesCache: string[] | null = null
   private ninjaCache = new Map<string, NinjaEntry>()
   private ninjaLoadedLeague = ''
   private ninjaLoadedAt = 0
@@ -129,13 +130,42 @@ export class PoeApiClient {
   constructor (private readonly getConfig: () => AppConfig) {
     this.cacheDir = path.join(app.getPath('userData'), 'cache')
     fs.mkdirSync(this.cacheDir, { recursive: true })
+    this.loadSearchCacheFromDisk()
   }
 
-  async getLeagues (): Promise<string[]> {
+  async getLeagues (forceRefresh = false): Promise<string[]> {
+    const cfg = this.getConfig()
+    const cachePath = path.join(this.cacheDir, 'leagues.json')
+    const ttlMs = cfg.statsCacheTtlHours * 3600 * 1000
+
+    if (!forceRefresh && this.leaguesCache && this.leaguesCache.length > 0) {
+      return this.leaguesCache
+    }
+
+    if (!forceRefresh) {
+      const cached = this.readCache<string[]>(cachePath, ttlMs)
+      if (cached && cached.length > 0) {
+        this.leaguesCache = cached
+        return cached
+      }
+    }
+
     const data = await this.fetchJson<{ result: Array<{ id: string; text: string }> }>(
       `${POE_API_BASE}/data/leagues`
     )
-    return data.result.map((l) => l.id)
+    const leagues = data.result.map((l) => l.id)
+    this.leaguesCache = leagues
+    this.writeCache(cachePath, leagues)
+    return leagues
+  }
+
+  clearSearchCache (): void {
+    this.searchCache.clear()
+    try {
+      fs.rmSync(path.join(this.cacheDir, 'trade-search-cache.json'), { force: true })
+    } catch {
+      // Ignore
+    }
   }
 
   async ensureStatsLoaded (forceRefresh = false): Promise<StatMatcher> {
@@ -438,9 +468,10 @@ export class PoeApiClient {
       query.filters = filters
     }
 
+    const tradeTtlMs = (cfg.tradeCacheTtlMinutes ?? 5) * 60 * 1000
     const cacheKey = JSON.stringify({ league: cfg.league, query })
     const cachedSearch = this.searchCache.get(cacheKey)
-    if (cachedSearch && Date.now() - cachedSearch.at < 30_000) {
+    if (cachedSearch && Date.now() - cachedSearch.at < tradeTtlMs) {
       return { ...cachedSearch.result, item: req.item, matchedMods }
     }
 
@@ -466,7 +497,7 @@ export class PoeApiClient {
           listings: [],
           matchedMods
         }
-        this.searchCache.set(cacheKey, { at: Date.now(), result: emptyRes })
+        this.saveSearchEntry(cacheKey, emptyRes)
         return emptyRes
       }
 
@@ -502,7 +533,7 @@ export class PoeApiClient {
         listings,
         matchedMods
       }
-      this.searchCache.set(cacheKey, { at: Date.now(), result: out })
+      this.saveSearchEntry(cacheKey, out)
       return out
     } catch (err) {
       return {
@@ -566,6 +597,41 @@ export class PoeApiClient {
       return null
     } catch {
       return null
+    }
+  }
+
+  private saveSearchEntry (key: string, result: PriceCheckResult): void {
+    this.searchCache.set(key, { at: Date.now(), result })
+    // Keep up to 100 most recent cached scans on disk
+    if (this.searchCache.size > 100) {
+      const oldestKey = this.searchCache.keys().next().value
+      if (oldestKey) this.searchCache.delete(oldestKey)
+    }
+    try {
+      const entries = Array.from(this.searchCache.entries())
+      fs.writeFileSync(
+        path.join(this.cacheDir, 'trade-search-cache.json'),
+        JSON.stringify(entries),
+        'utf8'
+      )
+    } catch {
+      // Ignore cache write errors
+    }
+  }
+
+  private loadSearchCacheFromDisk (): void {
+    try {
+      const raw = fs.readFileSync(path.join(this.cacheDir, 'trade-search-cache.json'), 'utf8')
+      const entries = JSON.parse(raw) as Array<[string, { at: number; result: PriceCheckResult }]>
+      const ttlMs = (this.getConfig().tradeCacheTtlMinutes ?? 5) * 60 * 1000
+      const now = Date.now()
+      for (const [k, v] of entries) {
+        if (now - v.at < ttlMs) {
+          this.searchCache.set(k, v)
+        }
+      }
+    } catch {
+      // No cache yet
     }
   }
 
