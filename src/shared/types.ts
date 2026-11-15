@@ -182,6 +182,7 @@ export interface AppConfig {
   poeSessId: string
   accountName: string
   selectedStashTabIds: string[]
+  minItemChaos: number
   bulkMinChaos: number
   autoSearchOnFilterChange: boolean
   restoreClipboard: boolean
@@ -207,6 +208,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   poeSessId: '',
   accountName: '',
   selectedStashTabIds: [],
+  minItemChaos: 1,
   bulkMinChaos: 10,
   autoSearchOnFilterChange: true,
   restoreClipboard: true,

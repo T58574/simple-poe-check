@@ -33,6 +33,16 @@ test('classifyStashItem identifies scarabs, essences, cards, and 6L uniques', ()
   })
   assert.equal(uniq.category, 'Unique')
   assert.equal(uniq.links, 6)
+  assert.equal(
+    classifyStashItem({
+      id: '5',
+      name: 'Black Mórrigan',
+      typeLine: 'Imprinted Bestiary Orb',
+      icon: 'https://web.poecdn.com/gen/image/.../BestiaryOrbFull.png',
+      frameType: 3
+    }).category,
+    'Beast'
+  )
 })
 
 test('computeSnapshotDiff calculates hourly profit and item deltas', () => {
