@@ -27,6 +27,95 @@ interface CacheFile<T> {
   data: T
 }
 
+interface RateRule {
+  max: number
+  windowSec: number
+  penaltySec: number
+  timestamps: number[]
+  blockedUntil: number
+}
+
+class PolicyRateLimiter {
+  private readonly policies = new Map<string, RateRule[]>()
+
+  async waitForSlot (policyKey: string): Promise<void> {
+    const rules = this.policies.get(policyKey)
+    if (!rules || rules.length === 0) return
+
+    const now = Date.now()
+    for (const rule of rules) {
+      if (rule.blockedUntil > now) {
+        const waitSec = Math.ceil((rule.blockedUntil - now) / 1000)
+        throw new Error(`PoE Trade rate limit active (${waitSec}s remaining)`)
+      }
+      const cutoff = now - rule.windowSec * 1000
+      rule.timestamps = rule.timestamps.filter((ts) => ts > cutoff)
+
+      if (rule.timestamps.length >= rule.max) {
+        const oldest = rule.timestamps[0]
+        const waitMs = oldest + rule.windowSec * 1000 - now + 150
+        if (waitMs > 10_000) {
+          throw new Error(`Rate limit window full, wait ${Math.ceil(waitMs / 1000)}s`)
+        }
+        if (waitMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, waitMs))
+        }
+      }
+    }
+
+    const recordNow = Date.now()
+    for (const rule of rules) {
+      rule.timestamps.push(recordNow)
+    }
+  }
+
+  updateFromHeaders (policyKey: string, headers: Headers): void {
+    const limitHeader = headers.get('x-rate-limit-ip')
+    const stateHeader = headers.get('x-rate-limit-ip-state')
+    if (!limitHeader) return
+
+    const parsedLimits = limitHeader.split(',').map((part) => {
+      const [max, windowSec, penaltySec] = part.trim().split(':').map(Number)
+      return { max, windowSec, penaltySec }
+    }).filter((r) => r.max > 0 && r.windowSec > 0)
+
+    const parsedStates = (stateHeader ?? '').split(',').map((part) => {
+      const [count, windowSec, activePenalty] = part.trim().split(':').map(Number)
+      return { count, windowSec, activePenalty }
+    })
+
+    const existing = this.policies.get(policyKey) ?? []
+    const now = Date.now()
+
+    const nextRules: RateRule[] = parsedLimits.map((lim, idx) => {
+      const prev = existing.find((e) => e.max === lim.max && e.windowSec === lim.windowSec)
+      const state = parsedStates[idx]
+      const blockedUntil = state && state.activePenalty > 0
+        ? now + state.activePenalty * 1000
+        : (prev?.blockedUntil ?? 0)
+
+      let timestamps = prev?.timestamps ?? []
+      if (state && state.count > timestamps.length) {
+        // Sync timestamps up to server-reported count
+        const missing = state.count - timestamps.length
+        for (let i = 0; i < missing; i++) {
+          timestamps.push(now)
+        }
+      }
+
+      return {
+        max: lim.max,
+        windowSec: lim.windowSec,
+        penaltySec: lim.penaltySec,
+        timestamps,
+        blockedUntil
+      }
+    })
+
+    this.policies.set(policyKey, nextRules)
+  }
+}
+
 export class PoeApiClient {
   private readonly cacheDir: string
   private matcher: StatMatcher | null = null
@@ -35,6 +124,7 @@ export class PoeApiClient {
   private ninjaLoadedAt = 0
   private divineChaosRate = 0
   private searchCache = new Map<string, { at: number; result: PriceCheckResult }>()
+  private readonly rateLimiter = new PolicyRateLimiter()
 
   constructor (private readonly getConfig: () => AppConfig) {
     this.cacheDir = path.join(app.getPath('userData'), 'cache')
@@ -284,7 +374,7 @@ export class PoeApiClient {
     }))
 
     const query: Record<string, unknown> = {
-      status: { option: 'online' },
+      status: { option: 'available' },
       stats: [{ type: 'and', filters: statFilters }]
     }
 
@@ -384,6 +474,7 @@ export class PoeApiClient {
         result: Array<{
           listing?: {
             indexed?: string
+            fee?: number
             account?: { name?: string }
             price?: { amount?: number; currency?: string }
           }
@@ -398,7 +489,8 @@ export class PoeApiClient {
           amount: price.amount,
           currency: price.currency,
           accountName: entry.listing?.account?.name ?? 'unknown',
-          indexed: entry.listing?.indexed ?? ''
+          indexed: entry.listing?.indexed ?? '',
+          isInstantBuyout: entry.listing?.fee != null
         })
       }
 
@@ -425,6 +517,16 @@ export class PoeApiClient {
 
   private async fetchJson<T> (url: string, init?: RequestInit, retried = false): Promise<T> {
     const cfg = this.getConfig()
+    const policyKey = url.includes('/api/trade/search/')
+      ? 'trade-search'
+      : url.includes('/api/trade/fetch/')
+        ? 'trade-fetch'
+        : ''
+
+    if (policyKey) {
+      await this.rateLimiter.waitForSlot(policyKey)
+    }
+
     const res = await fetch(url, {
       ...init,
       signal: AbortSignal.timeout(cfg.requestTimeoutMs),
@@ -434,6 +536,11 @@ export class PoeApiClient {
         ...(init?.headers ?? {})
       }
     })
+
+    if (policyKey) {
+      this.rateLimiter.updateFromHeaders(policyKey, res.headers)
+    }
+
     if (res.status === 429) {
       const retryAfter = Number.parseInt(res.headers.get('retry-after') ?? '0', 10) || 2
       if (!retried && retryAfter <= 5) {

@@ -454,7 +454,10 @@ onUnmounted(() => {
             <div v-if="loading" class="empty-state">Searching PoE Trade...</div>
             <div v-else-if="result.listings.length > 0" class="listings">
               <div v-for="(l, idx) in result.listings" :key="idx" class="listing-row">
-                <span class="listing-price">{{ l.amount }} {{ l.currency }}</span>
+                <span class="listing-price">
+                  {{ l.amount }} {{ l.currency }}
+                  <span v-if="!l.isInstantBuyout" class="badge kind-inperson">in person</span>
+                </span>
                 <span class="listing-meta">{{ l.accountName }} · {{ formatAge(l.indexed) }}</span>
               </div>
             </div>

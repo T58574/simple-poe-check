@@ -71,6 +71,7 @@ export interface PriceListing {
   currency: string
   accountName: string
   indexed: string
+  isInstantBuyout: boolean
 }
 
 export interface PriceCheckResult {
