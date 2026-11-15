@@ -43,6 +43,16 @@ const weaponMins = reactive<{ dps?: number; pdps?: number; aps?: number; crit?: 
 const armourEnabled = reactive({ ar: false, ev: false, es: false })
 const armourMins = reactive<{ ar?: number; ev?: number; es?: number }>({})
 
+const socketFilter = reactive<{
+  enabled: boolean
+  socketsMin?: number
+  linksMin?: number
+  r?: number
+  g?: number
+  b?: number
+  w?: number
+}>({ enabled: false })
+
 let autoSearchTimer: ReturnType<typeof setTimeout> | null = null
 let unsubResult: (() => void) | null = null
 let unsubLoading: (() => void) | null = null
@@ -94,6 +104,14 @@ function syncFiltersFromResult (res: PriceCheckResult): void {
     armourMins.ev = Math.floor(item.armour.evasion * 0.85)
     armourMins.es = Math.floor(item.armour.energyShield * 0.85)
   }
+
+  socketFilter.enabled = item.maxLinks >= 5
+  socketFilter.socketsMin = item.sockets
+  socketFilter.linksMin = item.maxLinks > 0 ? item.maxLinks : undefined
+  socketFilter.r = item.socketColors?.r || undefined
+  socketFilter.g = item.socketColors?.g || undefined
+  socketFilter.b = item.socketColors?.b || undefined
+  socketFilter.w = item.socketColors?.w || undefined
 
   const nextMods = new Set<number>()
   for (const key of Object.keys(modMins)) {
@@ -167,7 +185,17 @@ async function runSearch (): Promise<void> {
       useCorrupted: useCorrupted.value,
       useQuality: useQuality.value,
       weaponFilters: Object.keys(weaponFilters).length > 0 ? weaponFilters : undefined,
-      armourFilters: Object.keys(armourFilters).length > 0 ? armourFilters : undefined
+      armourFilters: Object.keys(armourFilters).length > 0 ? armourFilters : undefined,
+      socketFilters: socketFilter.enabled
+        ? {
+            socketsMin: socketFilter.socketsMin,
+            linksMin: socketFilter.linksMin,
+            r: socketFilter.r,
+            g: socketFilter.g,
+            b: socketFilter.b,
+            w: socketFilter.w
+          }
+        : undefined
     })
     result.value = updated
   } catch (err) {
@@ -537,6 +565,40 @@ onUnmounted(() => {
                 </div>
               </div>
               <span class="price-sub">{{ result.summary.instantCount }} instant</span>
+            </div>
+
+            <!-- Sockets / Links / Colors filter -->
+            <div v-if="result.item.sockets && result.item.sockets > 0" class="socket-filter-row" :class="{ checked: socketFilter.enabled }">
+              <label class="socket-toggle">
+                <input v-model="socketFilter.enabled" type="checkbox" @change="scheduleAutoSearch" />
+                <span>Sockets</span>
+              </label>
+              <div class="socket-inputs">
+                <label class="sock-chip" title="Min Sockets">
+                  <span>S</span>
+                  <input v-model.number="socketFilter.socketsMin" type="number" min="1" max="6" class="sock-num" @change="scheduleAutoSearch" />
+                </label>
+                <label class="sock-chip" title="Min Links">
+                  <span>L</span>
+                  <input v-model.number="socketFilter.linksMin" type="number" min="0" max="6" class="sock-num" @change="scheduleAutoSearch" />
+                </label>
+                <label class="sock-chip sock-r" title="Red Sockets">
+                  <span>R</span>
+                  <input v-model.number="socketFilter.r" type="number" min="0" max="6" class="sock-num" @change="scheduleAutoSearch" />
+                </label>
+                <label class="sock-chip sock-g" title="Green Sockets">
+                  <span>G</span>
+                  <input v-model.number="socketFilter.g" type="number" min="0" max="6" class="sock-num" @change="scheduleAutoSearch" />
+                </label>
+                <label class="sock-chip sock-b" title="Blue Sockets">
+                  <span>B</span>
+                  <input v-model.number="socketFilter.b" type="number" min="0" max="6" class="sock-num" @change="scheduleAutoSearch" />
+                </label>
+                <label class="sock-chip sock-w" title="White Sockets">
+                  <span>W</span>
+                  <input v-model.number="socketFilter.w" type="number" min="0" max="6" class="sock-num" @change="scheduleAutoSearch" />
+                </label>
+              </div>
             </div>
 
             <!-- Weapon computed stats -->

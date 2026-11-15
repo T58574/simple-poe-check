@@ -51,6 +51,8 @@ export interface ParsedItem {
   ilvl: number | null
   quality: number | null
   stackSize: number | null
+  sockets?: number
+  socketColors?: { r: number; g: number; b: number; w: number }
   maxLinks: number
   corrupted: boolean
   synthesised: boolean
@@ -151,6 +153,14 @@ export interface TradeSearchRequest {
     ar?: NumericRange
     ev?: NumericRange
     es?: NumericRange
+  }
+  socketFilters?: {
+    socketsMin?: number
+    linksMin?: number
+    r?: number
+    g?: number
+    b?: number
+    w?: number
   }
 }
 

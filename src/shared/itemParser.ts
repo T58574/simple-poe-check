@@ -179,17 +179,32 @@ function parseMetaLine (line: string): { kind?: ModifierKind; tier?: number } | 
   return { kind, tier }
 }
 
-function parseMaxLinks (socketsLine: string): number {
+function parseSocketsInfo (socketsLine: string): {
+  sockets: number
+  maxLinks: number
+  socketColors: { r: number; g: number; b: number; w: number }
+} {
   const value = socketsLine.slice('Sockets:'.length).trim()
-  if (!value) return 0
+  const socketColors = { r: 0, g: 0, b: 0, w: 0 }
+  if (!value) return { sockets: 0, maxLinks: 0, socketColors }
+
+  let sockets = 0
   let maxLinks = 0
   for (const group of value.split(/\s+/)) {
-    const socketsInGroup = group.split('-').length
-    if (socketsInGroup > maxLinks) {
-      maxLinks = socketsInGroup
+    const parts = group.split('-').filter(Boolean)
+    sockets += parts.length
+    if (parts.length > maxLinks) {
+      maxLinks = parts.length
+    }
+    for (const p of parts) {
+      const ch = p.toUpperCase()
+      if (ch === 'R') socketColors.r++
+      else if (ch === 'G') socketColors.g++
+      else if (ch === 'B') socketColors.b++
+      else if (ch === 'W') socketColors.w++
     }
   }
-  return maxLinks
+  return { sockets, maxLinks, socketColors }
 }
 
 function parseDamageRangesAverage (line: string): number {
@@ -267,6 +282,8 @@ export function parseItemText (rawText: string): ParsedItem | null {
   let ilvl: number | null = null
   let quality: number | null = null
   let stackSize: number | null = null
+  let sockets = 0
+  let socketColors: { r: number; g: number; b: number; w: number } | undefined
   let maxLinks = 0
   let corrupted = false
   let synthesised = false
@@ -310,7 +327,10 @@ export function parseItemText (rawText: string): ParsedItem | null {
         stackSize = m ? Number.parseInt(m[1], 10) : null
         sectionHasKnownHeader = true
       } else if (line.startsWith('Sockets:')) {
-        maxLinks = parseMaxLinks(line)
+        const parsedSockets = parseSocketsInfo(line)
+        sockets = parsedSockets.sockets
+        maxLinks = parsedSockets.maxLinks
+        socketColors = parsedSockets.sockets > 0 ? parsedSockets.socketColors : undefined
         sectionHasKnownHeader = true
       } else if (line.startsWith('Map Tier:')) {
         mapTier = Number.parseInt(line.slice('Map Tier:'.length).trim(), 10) || undefined
@@ -369,7 +389,10 @@ export function parseItemText (rawText: string): ParsedItem | null {
       }
     }
 
-    if (sectionHasKnownHeader) continue
+    const hasMetaLines = lines.some((l) => META_MOD_RE.test(l))
+    if (sectionHasKnownHeader && !hasMetaLines) continue
+
+    if (rarity === 'Gem') continue
 
     if (lines.some((l) => l.startsWith('Requirements:') || l.startsWith('Note:') || l.startsWith('Place into'))) {
       continue
@@ -385,7 +408,6 @@ export function parseItemText (rawText: string): ParsedItem | null {
     }
 
     // Group lines under Advanced Mod Descriptions ({...}) so multi-line mods stay together
-    const hasMetaLines = lines.some((l) => META_MOD_RE.test(l))
     if (hasMetaLines) {
       let pendingKind: ModifierKind | undefined
       let pendingTier: number | undefined
@@ -393,13 +415,14 @@ export function parseItemText (rawText: string): ParsedItem | null {
 
       const flushBuffered = (): void => {
         if (bufferedLines.length === 0) return
+        const rawJoined = bufferedLines.join('\n')
         const joined = bufferedLines.join(' ')
         bufferedLines = []
         if (!isModLine(joined)) return
         const normalized = normalizeModTemplate(joined, pendingKind, pendingTier)
         if (normalized.kind === 'fractured') fractured = true
         modifiers.push({
-          raw: joined,
+          raw: rawJoined,
           display: normalized.display,
           template: normalized.template,
           values: normalized.values,
@@ -497,6 +520,8 @@ export function parseItemText (rawText: string): ParsedItem | null {
     ilvl,
     quality,
     stackSize,
+    sockets: sockets > 0 ? sockets : undefined,
+    socketColors,
     maxLinks,
     corrupted,
     synthesised,

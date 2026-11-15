@@ -292,3 +292,58 @@ test('parses Map (Tier 15) generic map, hybrid fractured mod with inline (Local)
 
   assert.equal(calcDefaultMinFilter([48], undefined, 1), 45)
 })
+
+test('parses Skill Gem without bogus description mods, Eldritch influenced gloves with all explicit mods, and socket colors', () => {
+  const gemText = [
+    'Item Class: Skill Gems',
+    'Rarity: Gem',
+    "Battlemage's Cry",
+    '--------',
+    'Warcry, Critical, Trigger, AoE, Duration',
+    'Level: 1',
+    'Quality: +14% (augmented)',
+    '--------',
+    'Additional Effects From Quality:',
+    '28(0-40)% increased Cooldown Recovery Rate'
+  ].join('\n')
+  const gem = parseItemText(gemText)
+  assert.ok(gem)
+  assert.equal(gem.rarity, 'Gem')
+  assert.equal(gem.gemLevel, 1)
+  assert.equal(gem.quality, 14)
+  assert.equal(gem.modifiers.length, 0)
+
+  const eldritchGloves = [
+    'Item Class: Gloves',
+    'Rarity: Rare',
+    'Phoenix Hand',
+    'Goliath Gauntlets',
+    '--------',
+    'Quality: +20% (augmented)',
+    'Armour: 211 (augmented)',
+    '--------',
+    'Sockets: W-W-R-G ',
+    '--------',
+    'Item Level: 84',
+    '--------',
+    '{ Searing Exarch Implicit Modifier (Lesser) — Damage, Minion }',
+    'Minions deal 16(14-16)% increased Damage',
+    '{ Eater of Worlds Implicit Modifier (Grand) — Damage, Physical, Elemental, Lightning }',
+    '20% of Physical Damage Converted to Lightning Damage',
+    '--------',
+    '{ Prefix Modifier "Athlete\'s" (Tier: 1) — Life }',
+    '+128(115-129) to maximum Life',
+    '{ Suffix Modifier "of the Volcano" (Tier: 3) — Elemental, Fire, Resistance }',
+    '+39(36-41)% to Fire Resistance',
+    '{ Master Crafted Suffix Modifier "of Craft" (Rank: 3) — Attack }',
+    '+213(151-220) to Accuracy Rating',
+    'Searing Exarch Item',
+    'Eater of Worlds Item'
+  ].join('\n')
+  const gloves = parseItemText(eldritchGloves)
+  assert.ok(gloves)
+  assert.equal(gloves.sockets, 4)
+  assert.deepEqual(gloves.socketColors, { r: 1, g: 1, b: 0, w: 2 })
+  assert.equal(gloves.influences?.length, 2)
+  assert.equal(gloves.modifiers.length, 5)
+})
