@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseItemText } from '../src/shared/itemParser'
-import { StatMatcher } from '../src/shared/statMatcher'
+import { calcDefaultMinFilter, StatMatcher } from '../src/shared/statMatcher'
 
 test('parses rare body armour with links, implicit, explicit, crafted mods', () => {
   const raw = `Item Class: Body Armours
@@ -171,4 +171,92 @@ Iron Ring
   assert.ok(weaponItem && ringItem)
   assert.equal(matcher.matchModifier(weaponItem.modifiers[0], { isLocalItem: true }).statId, 'explicit.stat_210067635')
   assert.equal(matcher.matchModifier(ringItem.modifiers[0], { isLocalItem: false }).statId, 'explicit.stat_681332047')
+})
+
+test('parses Unidentified unique, non-numeric unique mod, Superior base, Gem, and Map', () => {
+  const unid = parseItemText(`Item Class: Belts
+Rarity: Unique
+Leather Belt
+--------
+Unidentified`)
+  assert.ok(unid)
+  assert.equal(unid.unidentified, true)
+  assert.equal(unid.baseType, 'Leather Belt')
+
+  const uniqueWithNonNumeric = parseItemText(`Item Class: Boots
+Rarity: Unique
+Wanderlust
+Wool Shoes
+--------
++20 to Energy Shield
+Cannot be Frozen
+--------
+Some flavor text`)
+  assert.ok(uniqueWithNonNumeric)
+  assert.equal(uniqueWithNonNumeric.modifiers.length, 2)
+  assert.equal(uniqueWithNonNumeric.modifiers[1].template, 'Cannot be Frozen')
+
+  const superior = parseItemText(`Item Class: Body Armours
+Rarity: Normal
+Superior Vaal Regalia
+--------
+Quality: +12% (augmented)
+Energy Shield: 185 (augmented)`)
+  assert.ok(superior)
+  assert.equal(superior.baseType, 'Vaal Regalia')
+  assert.ok(superior.armour?.q20EnergyShield && superior.armour.q20EnergyShield > 185)
+
+  const gem = parseItemText(`Item Class: Skill Gems
+Rarity: Gem
+Determination
+--------
+Level: 21 (Max)
+Quality: +20% (augmented)
+--------
+Corrupted`)
+  assert.ok(gem)
+  assert.equal(gem.gemLevel, 21)
+  assert.equal(gem.quality, 20)
+  assert.equal(gem.corrupted, true)
+
+  const map = parseItemText(`Item Class: Maps
+Rarity: Normal
+Blighted Dune Map
+--------
+Map Tier: 16`)
+  assert.ok(map)
+  assert.equal(map.mapTier, 16)
+  assert.equal(map.blighted, true)
+})
+
+test('computes pseudo-mods and calcDefaultMinFilter handles ranges, decimals, negatives', () => {
+  const matcher = new StatMatcher([
+    { id: 'explicit.fire', text: '+#% to Fire Resistance', type: 'explicit' },
+    { id: 'explicit.cold', text: '+#% to Cold Resistance', type: 'explicit' },
+    { id: 'explicit.life', text: '+# to maximum Life', type: 'explicit' },
+    { id: 'pseudo.ele_res', text: '+#% total Elemental Resistance', type: 'pseudo' },
+    { id: 'pseudo.life', text: '+# total maximum Life', type: 'pseudo' }
+  ])
+
+  const item = parseItemText(`Item Class: Rings
+Rarity: Rare
+Test Ring
+Ruby Ring
+--------
++40% to Fire Resistance
++35% to Cold Resistance
++70 to maximum Life`)
+  assert.ok(item)
+
+  const matched = matcher.matchAll(item.modifiers)
+  const pseudos = matcher.computePseudoMods(matched)
+  assert.equal(pseudos.length, 2)
+  assert.equal(pseudos[0].statId, 'pseudo.ele_res')
+  assert.equal(pseudos[0].modifier.values[0], 75)
+  assert.equal(pseudos[1].statId, 'pseudo.life')
+  assert.equal(pseudos[1].modifier.values[0], 70)
+
+  assert.equal(calcDefaultMinFilter([10, 20], 0.8), 12)
+  assert.equal(calcDefaultMinFilter([0.4], 0.85), 0.3)
+  assert.equal(calcDefaultMinFilter([-10], 0.85), -12)
 })

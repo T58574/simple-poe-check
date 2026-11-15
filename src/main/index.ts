@@ -8,6 +8,45 @@ import { PoeApiClient } from './poeApi'
 
 let tray: Tray | null = null
 
+function createTrayIcon (): Electron.NativeImage {
+  const size = 16
+  const buf = Buffer.alloc(size * size * 4)
+  // BGRA format for Electron createFromBitmap
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4
+      const dx = x - 7.5
+      const dy = y - 7.5
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (dist <= 7.2) {
+        const isRing = dist >= 5.2 || (Math.abs(dx) < 1.3 && Math.abs(dy) < 4.0) || (Math.abs(dy) < 1.3 && Math.abs(dx) < 4.0)
+        if (isRing) {
+          // Gold accent (#e0b35a -> BGRA)
+          buf[idx] = 0x5a
+          buf[idx + 1] = 0xb3
+          buf[idx + 2] = 0xe0
+          buf[idx + 3] = 0xff
+        } else {
+          // Dark slate (#171b22 -> BGRA)
+          buf[idx] = 0x22
+          buf[idx + 1] = 0x1b
+          buf[idx + 2] = 0x17
+          buf[idx + 3] = 0xff
+        }
+      }
+    }
+  }
+  return nativeImage.createFromBitmap(buf, { width: size, height: size })
+}
+
+function pickDefaultLeague (leagues: string[]): string | null {
+  if (leagues.length === 0) return null
+  const nonPermanent = leagues.find(
+    (l) => !/^(Standard|Hardcore|SSF|Ruthless)/i.test(l)
+  )
+  return nonPermanent ?? leagues[0]
+}
+
 async function main (): Promise<void> {
   await app.whenReady()
 
@@ -62,12 +101,25 @@ async function main (): Promise<void> {
   })
   ipcMain.handle(IPC_CHANNELS.SEARCH_TRADE, (_e, req: TradeSearchRequest) => poeApi.searchTrade(req))
 
-  // Warm up caches in the background
-  void poeApi.ensureStatsLoaded().catch(() => undefined)
-  void poeApi.ensureNinjaLoaded().catch(() => undefined)
+  // Auto-select active challenge league on first run, then warm up caches
+  void (async () => {
+    try {
+      const cfg = configStore.get()
+      if (!cfg.leagueInitialized) {
+        const leagues = await poeApi.getLeagues()
+        const picked = pickDefaultLeague(leagues)
+        if (picked) {
+          configStore.save({ league: picked, leagueInitialized: true })
+        }
+      }
+      await Promise.all([poeApi.ensureStatsLoaded(), poeApi.ensureNinjaLoaded()])
+    } catch {
+      // Non-fatal background warmup
+    }
+  })()
 
   // Tray
-  tray = new Tray(nativeImage.createEmpty())
+  tray = new Tray(createTrayIcon())
   tray.setToolTip('Simple PoE Check')
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -82,6 +134,7 @@ async function main (): Promise<void> {
       { label: 'Quit', click: () => app.quit() }
     ])
   )
+  tray.on('double-click', () => overlay.showStandalone())
 
   app.on('will-quit', () => {
     hotkeys.stop()

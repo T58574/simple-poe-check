@@ -1,5 +1,5 @@
-import { BrowserWindow, screen } from 'electron'
-import { OVERLAY_WINDOW_OPTS, OverlayController } from 'electron-overlay-window'
+import { BrowserWindow, dialog, screen } from 'electron'
+import { OVERLAY_WINDOW_OPTS, OverlayController, type AttachEvent } from 'electron-overlay-window'
 import path from 'node:path'
 import { IPC_CHANNELS, type OverlayStatePayload } from '../shared/types'
 
@@ -8,6 +8,7 @@ export class OverlayWindowManager {
   private gameActive = false
   private overlayVisible = false
   private attached = false
+  private adminWarned = false
 
   get isGameActive (): boolean {
     return this.gameActive
@@ -43,6 +44,15 @@ export class OverlayWindowManager {
     })
 
     if (!this.attached) {
+      OverlayController.events.on('attach', (e: AttachEvent) => {
+        if (e.hasAccess === false && !this.adminWarned) {
+          this.adminWarned = true
+          dialog.showErrorBox(
+            'Simple PoE Check - Administrator Rights Required',
+            'Path of Exile is running with administrator rights.\n\nPlease restart Simple PoE Check as Administrator so the overlay can attach.'
+          )
+        }
+      })
       OverlayController.events.on('focus', () => {
         this.gameActive = true
         if (this.overlayVisible) {

@@ -1,25 +1,56 @@
-import { app } from 'electron'
+import { app, net } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { StatMatcher } from '../shared/statMatcher'
+import { calcDefaultMinFilter, StatMatcher } from '../shared/statMatcher'
 import type {
   AppConfig,
   MatchedModifier,
   ParsedItem,
   PriceCheckResult,
   PriceListing,
+  PriceSummary,
+  RateLimitStatus,
   StatEntry,
   TradeSearchRequest
 } from '../shared/types'
 
-const USER_AGENT = 'SimplePoeCheck/0.1.0 (local desktop overlay)'
+const USER_AGENT = 'SimplePoeCheck/0.2.0 (desktop overlay)'
 const POE_API_BASE = 'https://www.pathofexile.com/api/trade'
 const NINJA_API_BASE = 'https://poe.ninja/api/data'
+
+const TRADE_CURRENCY_TO_NAME: Record<string, string> = {
+  chaos: 'chaos orb',
+  divine: 'divine orb',
+  exalted: 'exalted orb',
+  mirror: 'mirror of kalandra',
+  alch: 'orb of alchemy',
+  vaal: 'vaal orb',
+  fusing: 'orb of fusing',
+  jewellers: "jeweller's orb",
+  chrom: 'chromatic orb',
+  alt: 'orb of alteration',
+  scour: 'orb of scouring',
+  regret: 'orb of regret',
+  regal: 'regal orb',
+  gcp: "gemcutter's prism",
+  chisel: "cartographer's chisel",
+  blessed: 'blessed orb',
+  chance: 'orb of chance',
+  annul: 'orb of annulment',
+  ancient: 'ancient orb',
+  stacked_deck: 'stacked deck'
+}
 
 interface NinjaEntry {
   name: string
   chaosValue: number
   divineValue?: number
+  links?: number
+  gemLevel?: number
+  gemQuality?: number
+  corrupted?: boolean
+  mapTier?: number
+  variantCount?: number
 }
 
 interface CacheFile<T> {
@@ -37,8 +68,24 @@ interface RateRule {
 
 class PolicyRateLimiter {
   private readonly policies = new Map<string, RateRule[]>()
+  private readonly queues = new Map<string, Promise<void>>()
 
-  async waitForSlot (policyKey: string): Promise<void> {
+  async acquire (policyKey: string): Promise<void> {
+    const prev = this.queues.get(policyKey) ?? Promise.resolve()
+    let release!: () => void
+    const next = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    this.queues.set(policyKey, next)
+    await prev
+    try {
+      await this.waitForSlot(policyKey)
+    } finally {
+      release()
+    }
+  }
+
+  private async waitForSlot (policyKey: string): Promise<void> {
     const rules = this.policies.get(policyKey)
     if (!rules || rules.length === 0) return
 
@@ -70,8 +117,8 @@ class PolicyRateLimiter {
   }
 
   updateFromHeaders (policyKey: string, headers: Headers): void {
-    const limitHeader = headers.get('x-rate-limit-ip')
-    const stateHeader = headers.get('x-rate-limit-ip-state')
+    const limitHeader = headers.get('x-rate-limit-ip') ?? headers.get('x-rate-limit-account')
+    const stateHeader = headers.get('x-rate-limit-ip-state') ?? headers.get('x-rate-limit-account-state')
     if (!limitHeader) return
 
     const parsedLimits = limitHeader.split(',').map((part) => {
@@ -92,14 +139,19 @@ class PolicyRateLimiter {
       const state = parsedStates[idx]
       const blockedUntil = state && state.activePenalty > 0
         ? now + state.activePenalty * 1000
-        : (prev?.blockedUntil ?? 0)
+        : 0
 
-      let timestamps = prev?.timestamps ?? []
-      if (state && state.count > timestamps.length) {
-        // Sync timestamps up to server-reported count
-        const missing = state.count - timestamps.length
-        for (let i = 0; i < missing; i++) {
-          timestamps.push(now)
+      let timestamps = (prev?.timestamps ?? []).filter((ts) => ts > now - lim.windowSec * 1000)
+      if (state) {
+        if (state.count === 0) {
+          timestamps = []
+        } else if (state.count < timestamps.length) {
+          timestamps = timestamps.slice(timestamps.length - state.count)
+        } else if (state.count > timestamps.length) {
+          const missing = state.count - timestamps.length
+          for (let i = 0; i < missing; i++) {
+            timestamps.push(now)
+          }
         }
       }
 
@@ -113,6 +165,26 @@ class PolicyRateLimiter {
     })
 
     this.policies.set(policyKey, nextRules)
+  }
+
+  getStatus (policyKey: string): RateLimitStatus | undefined {
+    const rules = this.policies.get(policyKey)
+    if (!rules || rules.length === 0) return undefined
+    const now = Date.now()
+    let tightest: RateLimitStatus | undefined
+    for (const r of rules) {
+      const active = r.timestamps.filter((ts) => ts > now - r.windowSec * 1000).length
+      const remaining = Math.max(0, r.max - active)
+      if (!tightest || remaining < tightest.remaining) {
+        tightest = {
+          remaining,
+          max: r.max,
+          windowSec: r.windowSec,
+          blockedUntil: r.blockedUntil > now ? r.blockedUntil : 0
+        }
+      }
+    }
+    return tightest
   }
 }
 
@@ -219,7 +291,7 @@ export class PoeApiClient {
       return
     }
 
-    const cachePath = path.join(this.cacheDir, `ninja-${sanitizeFilename(cfg.league)}.json`)
+    const cachePath = path.join(this.cacheDir, `ninja-v2-${sanitizeFilename(cfg.league)}.json`)
     if (!forceRefresh) {
       const cached = this.readCache<{ entries: Array<[string, NinjaEntry]>; divineChaosRate: number }>(
         cachePath,
@@ -257,7 +329,7 @@ export class PoeApiClient {
       }
     }
 
-    // Items (Uniques, Divination Cards, Scarabs, Maps, Skill Gems)
+    // Items
     const itemTypes = [
       'UniqueWeapon',
       'UniqueArmour',
@@ -273,16 +345,56 @@ export class PoeApiClient {
       itemTypes.map(async (type) => {
         try {
           const res = await this.fetchJson<{
-            lines: Array<{ name: string; chaosValue: number; divineValue?: number }>
+            lines: Array<{
+              name: string
+              chaosValue: number
+              divineValue?: number
+              links?: number
+              gemLevel?: number
+              gemQuality?: number
+              corrupted?: boolean
+              mapTier?: number
+            }>
           }>(`${NINJA_API_BASE}/itemoverview?league=${encodeURIComponent(cfg.league)}&type=${type}`)
+
+          const nameCounts = new Map<string, number>()
           for (const line of res.lines) {
-            const key = line.name.toLowerCase()
-            if (!map.has(key)) {
-              map.set(key, {
-                name: line.name,
-                chaosValue: line.chaosValue,
-                divineValue: line.divineValue
-              })
+            const baseKey = line.name.toLowerCase()
+            nameCounts.set(baseKey, (nameCounts.get(baseKey) ?? 0) + 1)
+          }
+
+          for (const line of res.lines) {
+            const baseKey = line.name.toLowerCase()
+            const variantCount = nameCounts.get(baseKey) ?? 1
+            const entry: NinjaEntry = {
+              name: line.name,
+              chaosValue: line.chaosValue,
+              divineValue: line.divineValue,
+              links: line.links,
+              gemLevel: line.gemLevel,
+              gemQuality: line.gemQuality,
+              corrupted: line.corrupted,
+              mapTier: line.mapTier,
+              variantCount
+            }
+
+            if (type === 'SkillGem') {
+              const gKey = `gem::${baseKey}::${line.gemLevel ?? 1}::${line.gemQuality ?? 0}::${line.corrupted ? 1 : 0}`
+              map.set(gKey, entry)
+            } else if (type === 'Map') {
+              const mKey = `map::${baseKey}::t${line.mapTier ?? 0}`
+              map.set(mKey, entry)
+            } else if (type.startsWith('Unique')) {
+              const linkBucket = line.links && line.links >= 5 ? line.links : 0
+              const uKey = `unique::${baseKey}::${linkBucket}L`
+              if (!map.has(uKey)) {
+                map.set(uKey, entry)
+              }
+              if (linkBucket === 0 && !map.has(baseKey)) {
+                map.set(baseKey, entry)
+              }
+            } else if (!map.has(baseKey)) {
+              map.set(baseKey, entry)
             }
           }
         } catch {
@@ -298,6 +410,48 @@ export class PoeApiClient {
     this.writeCache(cachePath, { entries: Array.from(map.entries()), divineChaosRate: divRate })
   }
 
+  private lookupNinja (item: ParsedItem): NinjaEntry | undefined {
+    const nameKey = item.name.toLowerCase()
+    const baseKey = item.baseType.toLowerCase()
+
+    if (item.rarity === 'Gem') {
+      const lvl = item.gemLevel ?? 1
+      const qual = item.quality ?? 0
+      const corr = item.corrupted ? 1 : 0
+      return (
+        this.ninjaCache.get(`gem::${nameKey}::${lvl}::${qual}::${corr}`) ??
+        this.ninjaCache.get(`gem::${nameKey}::${lvl}::0::${corr}`) ??
+        (lvl === 1 && qual === 0 && corr === 0 ? this.ninjaCache.get(`gem::${nameKey}::1::0::0`) : undefined)
+      )
+    }
+
+    if (item.rarity === 'Unique' && !item.unidentified) {
+      const linkBucket = item.maxLinks >= 5 ? item.maxLinks : 0
+      return (
+        this.ninjaCache.get(`unique::${nameKey}::${linkBucket}L`) ??
+        (linkBucket === 0 ? this.ninjaCache.get(nameKey) : undefined)
+      )
+    }
+
+    if (item.mapTier && (item.rarity === 'Normal' || item.rarity === 'Magic' || item.rarity === 'Rare')) {
+      return this.ninjaCache.get(`map::${baseKey}::t${item.mapTier}`)
+    }
+
+    if (item.rarity === 'Currency' || item.rarity === 'Divination Card') {
+      return this.ninjaCache.get(nameKey) ?? this.ninjaCache.get(baseKey)
+    }
+
+    return undefined
+  }
+
+  private buildMatchedMods (item: ParsedItem): MatchedModifier[] {
+    if (!this.matcher) return []
+    const isLocalItem = Boolean(item.weapon || item.armour)
+    const rawMatched = mergeMatchedMods(this.matcher.matchAll(item.modifiers, { isLocalItem }))
+    const pseudos = this.matcher.computePseudoMods(rawMatched)
+    return [...pseudos, ...rawMatched]
+  }
+
   async checkItem (item: ParsedItem): Promise<PriceCheckResult> {
     try {
       await Promise.all([this.ensureStatsLoaded(), this.ensureNinjaLoaded()])
@@ -311,36 +465,28 @@ export class PoeApiClient {
       }
     }
 
-    const isLocalItem = Boolean(item.weapon || item.armour)
-    const matchedMods: MatchedModifier[] = this.matcher
-      ? mergeMatchedMods(this.matcher.matchAll(item.modifiers, { isLocalItem }))
-      : []
+    const matchedMods = this.buildMatchedMods(item)
 
-    // Fast path via poe.ninja for Currency, Divination Card, Unique, Gem
-    if (
-      item.rarity === 'Currency' ||
-      item.rarity === 'Divination Card' ||
-      item.rarity === 'Unique' ||
-      item.rarity === 'Gem'
-    ) {
-      const lookupName = item.name.toLowerCase()
-      const ninjaHit = this.ninjaCache.get(lookupName) ?? this.ninjaCache.get(item.baseType.toLowerCase())
-      if (ninjaHit) {
-        const divineValue =
-          ninjaHit.divineValue ??
-          (this.divineChaosRate > 0 ? Number((ninjaHit.chaosValue / this.divineChaosRate).toFixed(2)) : undefined)
-        return {
-          source: 'ninja',
-          item,
-          chaosValue: Number(ninjaHit.chaosValue.toFixed(1)),
-          divineValue,
-          listings: [],
-          matchedMods
-        }
+    const ninjaHit = this.lookupNinja(item)
+    if (ninjaHit) {
+      const divineValue =
+        ninjaHit.divineValue ??
+        (this.divineChaosRate > 0 ? Number((ninjaHit.chaosValue / this.divineChaosRate).toFixed(2)) : undefined)
+      const ambiguous = Boolean(ninjaHit.variantCount && ninjaHit.variantCount > 1 && item.rarity === 'Unique')
+      return {
+        source: 'ninja',
+        item,
+        chaosValue: Number(ninjaHit.chaosValue.toFixed(1)),
+        divineValue,
+        ninjaAmbiguous: ambiguous || undefined,
+        ninjaVariantNote: ambiguous ? 'Multiple variants on poe.ninja — verify rolls on Trade' : undefined,
+        listings: [],
+        matchedMods,
+        rateLimit: this.rateLimiter.getStatus('trade-search')
       }
     }
 
-    // Trade API search for Rare / Magic / Normal / unmatched items
+    // Trade API search
     if (item.weapon && item.weapon.totalDps > 0) {
       return this.searchTrade({
         item,
@@ -359,7 +505,7 @@ export class PoeApiClient {
       .slice(0, 3)
       .map((m) => ({
         statId: m.statId!,
-        min: m.modifier.values.length > 0 ? Math.floor(m.modifier.values[0] * 0.85) : undefined
+        min: calcDefaultMinFilter(m.modifier.values)
       }))
 
     return this.searchTrade({
@@ -376,12 +522,8 @@ export class PoeApiClient {
     existingMatchedMods?: MatchedModifier[]
   ): Promise<PriceCheckResult> {
     const cfg = this.getConfig()
-    const isLocalItem = Boolean(req.item.weapon || req.item.armour)
-    const matchedMods =
-      existingMatchedMods ??
-      (this.matcher ? mergeMatchedMods(this.matcher.matchAll(req.item.modifiers, { isLocalItem })) : [])
+    const matchedMods = existingMatchedMods ?? this.buildMatchedMods(req.item)
 
-    // Merge duplicate statIds (e.g. hybrid % increased Physical Damage mods) by summing mins
     const mergedMap = new Map<string, { min?: number; max?: number }>()
     for (const f of req.filters) {
       const prev = mergedMap.get(f.statId)
@@ -403,17 +545,24 @@ export class PoeApiClient {
         : undefined
     }))
 
+    const statusOption = req.status ?? cfg.tradeStatus ?? 'available'
     const query: Record<string, unknown> = {
-      status: { option: 'available' },
+      status: { option: statusOption },
       stats: [{ type: 'and', filters: statFilters }]
     }
 
     if (req.item.rarity === 'Unique') {
-      query.name = req.item.name
+      if (!req.item.unidentified) {
+        query.name = req.item.name
+      }
       query.type = req.item.baseType
-    } else if (req.item.rarity === 'Currency' || req.item.rarity === 'Divination Card') {
+    } else if (
+      req.item.rarity === 'Currency' ||
+      req.item.rarity === 'Divination Card' ||
+      req.item.rarity === 'Gem'
+    ) {
       query.type = req.item.baseType
-    } else if (req.useBaseType || !req.item.tradeCategory) {
+    } else if ((req.useBaseType || !req.item.tradeCategory) && req.item.rarity !== 'Magic') {
       query.type = req.item.baseType
     }
 
@@ -423,6 +572,12 @@ export class PoeApiClient {
       filters.type_filters = {
         filters: {
           category: { option: req.item.tradeCategory }
+        }
+      }
+    } else if (req.item.rarity === 'Unique' && req.item.unidentified) {
+      filters.type_filters = {
+        filters: {
+          rarity: { option: 'unique' }
         }
       }
     }
@@ -460,6 +615,17 @@ export class PoeApiClient {
     if (req.useCorrupted) {
       miscFilters.corrupted = { option: req.item.corrupted ? 'true' : 'false' }
     }
+    if (req.item.rarity === 'Unique' && req.item.unidentified) {
+      miscFilters.identified = { option: 'false' }
+    }
+    if (req.item.rarity === 'Gem') {
+      if (req.item.gemLevel && req.item.gemLevel > 1) {
+        miscFilters.gem_level = { min: req.item.gemLevel }
+      }
+      if (req.item.quality && req.item.quality > 0) {
+        miscFilters.quality = { min: req.item.quality }
+      }
+    }
     if (Object.keys(miscFilters).length > 0) {
       filters.misc_filters = { filters: miscFilters }
     }
@@ -472,7 +638,12 @@ export class PoeApiClient {
     const cacheKey = JSON.stringify({ league: cfg.league, query })
     const cachedSearch = this.searchCache.get(cacheKey)
     if (cachedSearch && Date.now() - cachedSearch.at < tradeTtlMs) {
-      return { ...cachedSearch.result, item: req.item, matchedMods }
+      return {
+        ...cachedSearch.result,
+        item: req.item,
+        matchedMods,
+        rateLimit: this.rateLimiter.getStatus('trade-search')
+      }
     }
 
     try {
@@ -495,7 +666,8 @@ export class PoeApiClient {
           totalResults: 0,
           tradeUrl,
           listings: [],
-          matchedMods
+          matchedMods,
+          rateLimit: this.rateLimiter.getStatus('trade-search')
         }
         this.saveSearchEntry(cacheKey, emptyRes)
         return emptyRes
@@ -516,22 +688,27 @@ export class PoeApiClient {
       for (const entry of fetchRes.result) {
         const price = entry.listing?.price
         if (!price || price.amount === undefined || !price.currency) continue
+        const chaosAmount = this.convertToChaos(price.amount, price.currency)
         listings.push({
           amount: price.amount,
           currency: price.currency,
+          chaosAmount,
           accountName: entry.listing?.account?.name ?? 'unknown',
           indexed: entry.listing?.indexed ?? '',
           isInstantBuyout: entry.listing?.fee != null
         })
       }
 
+      const summary = this.computeSummary(listings)
       const out: PriceCheckResult = {
         source: 'trade',
         item: req.item,
         totalResults: searchRes.total,
         tradeUrl,
         listings,
-        matchedMods
+        summary,
+        matchedMods,
+        rateLimit: this.rateLimiter.getStatus('trade-search')
       }
       this.saveSearchEntry(cacheKey, out)
       return out
@@ -541,8 +718,50 @@ export class PoeApiClient {
         item: req.item,
         listings: [],
         matchedMods,
+        rateLimit: this.rateLimiter.getStatus('trade-search'),
         error: err instanceof Error ? err.message : String(err)
       }
+    }
+  }
+
+  private convertToChaos (amount: number, currency: string): number | undefined {
+    const key = currency.toLowerCase()
+    if (key === 'chaos') return Number(amount.toFixed(1))
+    if (key === 'divine' && this.divineChaosRate > 0) {
+      return Number((amount * this.divineChaosRate).toFixed(1))
+    }
+    const ninjaName = TRADE_CURRENCY_TO_NAME[key]
+    if (ninjaName) {
+      const hit = this.ninjaCache.get(ninjaName)
+      if (hit && hit.chaosValue > 0) {
+        return Number((amount * hit.chaosValue).toFixed(1))
+      }
+    }
+    return undefined
+  }
+
+  private computeSummary (listings: PriceListing[]): PriceSummary | undefined {
+    const chaosValues = listings
+      .map((l) => l.chaosAmount)
+      .filter((v): v is number => v !== undefined && v > 0)
+      .sort((a, b) => a - b)
+
+    if (chaosValues.length === 0) return undefined
+
+    const minChaos = Number(chaosValues[0].toFixed(1))
+    const mid = Math.floor(chaosValues.length / 2)
+    const medianRaw = chaosValues.length % 2 === 1
+      ? chaosValues[mid]
+      : (chaosValues[mid - 1] + chaosValues[mid]) / 2
+    const medianChaos = Number(medianRaw.toFixed(1))
+    const instantCount = listings.filter((l) => l.isInstantBuyout).length
+
+    return {
+      minChaos,
+      medianChaos,
+      minDivine: this.divineChaosRate > 0 ? Number((minChaos / this.divineChaosRate).toFixed(2)) : undefined,
+      medianDivine: this.divineChaosRate > 0 ? Number((medianChaos / this.divineChaosRate).toFixed(2)) : undefined,
+      instantCount
     }
   }
 
@@ -555,17 +774,22 @@ export class PoeApiClient {
         : ''
 
     if (policyKey) {
-      await this.rateLimiter.waitForSlot(policyKey)
+      await this.rateLimiter.acquire(policyKey)
     }
 
-    const res = await fetch(url, {
+    const headers: Record<string, string> = {
+      'User-Agent': USER_AGENT,
+      Accept: 'application/json',
+      ...(init?.headers as Record<string, string> | undefined)
+    }
+    if (cfg.poeSessId && url.includes('pathofexile.com')) {
+      headers.Cookie = `POESESSID=${cfg.poeSessId.trim()}`
+    }
+
+    const res = await net.fetch(url, {
       ...init,
       signal: AbortSignal.timeout(cfg.requestTimeoutMs),
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'application/json',
-        ...(init?.headers ?? {})
-      }
+      headers
     })
 
     if (policyKey) {
@@ -582,6 +806,9 @@ export class PoeApiClient {
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '')
+      if (res.status === 403 && /cloudflare|just a moment/i.test(body)) {
+        throw new Error('Blocked by Cloudflare (403). Add POESESSID in Settings or open Trade in browser.')
+      }
       throw new Error(`HTTP ${res.status} (${url}): ${body.slice(0, 140)}`)
     }
     return (await res.json()) as T
@@ -602,7 +829,6 @@ export class PoeApiClient {
 
   private saveSearchEntry (key: string, result: PriceCheckResult): void {
     this.searchCache.set(key, { at: Date.now(), result })
-    // Keep up to 100 most recent cached scans on disk
     if (this.searchCache.size > 100) {
       const oldestKey = this.searchCache.keys().next().value
       if (oldestKey) this.searchCache.delete(oldestKey)

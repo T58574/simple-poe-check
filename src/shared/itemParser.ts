@@ -39,6 +39,7 @@ const ITEM_CLASS_TO_CATEGORY: Record<string, string> = {
   Daggers: 'weapon.dagger',
   'Rune Daggers': 'weapon.runedagger',
   Wands: 'weapon.wand',
+  'Fishing Rods': 'weapon.rod',
   Shields: 'armour.shield',
   Helmets: 'armour.helmet',
   'Body Armours': 'armour.chest',
@@ -48,11 +49,35 @@ const ITEM_CLASS_TO_CATEGORY: Record<string, string> = {
   Amulets: 'accessory.amulet',
   Rings: 'accessory.ring',
   Belts: 'accessory.belt',
+  Trinkets: 'accessory.trinket',
   Jewels: 'jewel',
   'Abyss Jewels': 'jewel.abyss',
   'Cluster Jewels': 'jewel.cluster',
   Flasks: 'flask',
-  Maps: 'map'
+  Maps: 'map',
+  'Skill Gems': 'gem.activegem',
+  'Support Gems': 'gem.supportgem',
+  'Divination Cards': 'card',
+  'Stackable Currency': 'currency',
+  'Heist Contracts': 'heistmission.contract',
+  'Heist Blueprints': 'heistmission.blueprint',
+  'Heist Tools': 'heistequipment.heisttool',
+  'Heist Brooches': 'heistequipment.heistreward',
+  'Heist Gear': 'heistequipment.heistweapon',
+  'Heist Cloaks': 'heistequipment.heistutility',
+  'Sanctum Relics': 'sanctum.relic',
+  Tinctures: 'tincture'
+}
+
+const INFLUENCE_FLAGS: Record<string, string> = {
+  'Shaper Item': 'Shaper',
+  'Elder Item': 'Elder',
+  'Crusader Item': 'Crusader',
+  'Redeemer Item': 'Redeemer',
+  'Hunter Item': 'Hunter',
+  'Warlord Item': 'Warlord',
+  'Searing Exarch Item': 'Searing Exarch',
+  'Eater of Worlds Item': 'Eater of Worlds'
 }
 
 const KNOWN_FLAGS = new Set([
@@ -61,7 +86,8 @@ const KNOWN_FLAGS = new Set([
   'Fractured Item',
   'Mirrored',
   'Split',
-  'Unidentified'
+  'Unidentified',
+  ...Object.keys(INFLUENCE_FLAGS)
 ])
 
 const NON_MOD_PREFIXES = [
@@ -95,7 +121,8 @@ const NON_MOD_PREFIXES = [
   'Note:',
   'Place into',
   'Right click',
-  'Shift click'
+  'Shift click',
+  'Cannot use this item'
 ]
 
 export function stripInlineRanges (raw: string): string {
@@ -187,6 +214,25 @@ function isModLine (line: string): boolean {
   return !NON_MOD_PREFIXES.some((prefix) => line.startsWith(prefix))
 }
 
+function cleanBaseType (rawBase: string, rarity: ItemRarity): string {
+  if (rarity === 'Normal' || rarity === 'Magic' || rarity === 'Rare') {
+    return rawBase.replace(/^Superior\s+/i, '').trim()
+  }
+  return rawBase
+}
+
+function calcQ20Multiplier (
+  currentQuality: number | null,
+  corrupted: boolean,
+  localIncreasedPct: number
+): number | null {
+  const q = currentQuality ?? 0
+  if (corrupted || q >= 20) return null
+  const denom = 100 + localIncreasedPct + q
+  if (denom <= 0) return null
+  return (100 + localIncreasedPct + 20) / denom
+}
+
 export function parseItemText (rawText: string): ParsedItem | null {
   const trimmed = rawText.trim()
   if (!trimmed.includes('Rarity:')) {
@@ -215,7 +261,8 @@ export function parseItemText (rawText: string): ParsedItem | null {
   if (titleLines.length === 0) return null
 
   const name = titleLines[0]
-  const baseType = titleLines.length > 1 ? titleLines[1] : titleLines[0]
+  const rawBaseType = titleLines.length > 1 ? titleLines[1] : titleLines[0]
+  const baseType = cleanBaseType(rawBaseType, rarity)
 
   let ilvl: number | null = null
   let quality: number | null = null
@@ -224,6 +271,13 @@ export function parseItemText (rawText: string): ParsedItem | null {
   let corrupted = false
   let synthesised = false
   let fractured = false
+  let unidentified = false
+  let mirrored = false
+  let split = false
+  let gemLevel: number | undefined
+  let mapTier: number | undefined
+  const blighted = /\bBlighted\b|\bBlight-ravaged\b/i.test(baseType)
+  const influences: string[] = []
 
   let physAvg = 0
   let eleAvg = 0
@@ -257,6 +311,12 @@ export function parseItemText (rawText: string): ParsedItem | null {
         sectionHasKnownHeader = true
       } else if (line.startsWith('Sockets:')) {
         maxLinks = parseMaxLinks(line)
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Map Tier:')) {
+        mapTier = Number.parseInt(line.slice('Map Tier:'.length).trim(), 10) || undefined
+        sectionHasKnownHeader = true
+      } else if (line.startsWith('Level:') && rarity === 'Gem') {
+        gemLevel = Number.parseInt(line.slice('Level:'.length).trim(), 10) || undefined
         sectionHasKnownHeader = true
       } else if (line.startsWith('Physical Damage:')) {
         physAvg = parseDamageRangesAverage(line)
@@ -294,6 +354,18 @@ export function parseItemText (rawText: string): ParsedItem | null {
       } else if (line === 'Fractured Item') {
         fractured = true
         sectionHasKnownHeader = true
+      } else if (line === 'Unidentified') {
+        unidentified = true
+        sectionHasKnownHeader = true
+      } else if (line === 'Mirrored') {
+        mirrored = true
+        sectionHasKnownHeader = true
+      } else if (line === 'Split') {
+        split = true
+        sectionHasKnownHeader = true
+      } else if (INFLUENCE_FLAGS[line]) {
+        influences.push(INFLUENCE_FLAGS[line])
+        sectionHasKnownHeader = true
       }
     }
 
@@ -303,23 +375,60 @@ export function parseItemText (rawText: string): ParsedItem | null {
       continue
     }
 
-    let pendingKind: ModifierKind | undefined
-    let pendingTier: number | undefined
+    // Flavor text on Uniques sits in its own trailing section without numbers or mod markers
+    if (
+      rarity === 'Unique' &&
+      modifiers.length > 0 &&
+      lines.every((l) => !/\d/.test(l) && !l.includes('(') && !META_MOD_RE.test(l))
+    ) {
+      continue
+    }
+
+    // Group lines under Advanced Mod Descriptions ({...}) so multi-line mods stay together
+    const hasMetaLines = lines.some((l) => META_MOD_RE.test(l))
+    if (hasMetaLines) {
+      let pendingKind: ModifierKind | undefined
+      let pendingTier: number | undefined
+      let bufferedLines: string[] = []
+
+      const flushBuffered = (): void => {
+        if (bufferedLines.length === 0) return
+        const joined = bufferedLines.join(' ')
+        bufferedLines = []
+        if (!isModLine(joined)) return
+        const normalized = normalizeModTemplate(joined, pendingKind, pendingTier)
+        if (normalized.kind === 'fractured') fractured = true
+        modifiers.push({
+          raw: joined,
+          display: normalized.display,
+          template: normalized.template,
+          values: normalized.values,
+          kind: normalized.kind,
+          tier: normalized.tier
+        })
+        pendingKind = undefined
+        pendingTier = undefined
+      }
+
+      for (const line of lines) {
+        const meta = parseMetaLine(line)
+        if (meta) {
+          flushBuffered()
+          pendingKind = meta.kind
+          pendingTier = meta.tier
+          continue
+        }
+        if (isModLine(line)) {
+          bufferedLines.push(line)
+        }
+      }
+      flushBuffered()
+      continue
+    }
 
     for (const line of lines) {
-      const meta = parseMetaLine(line)
-      if (meta) {
-        pendingKind = meta.kind
-        pendingTier = meta.tier
-        continue
-      }
-
       if (!isModLine(line)) continue
-      if (rarity === 'Unique' && !/\d/.test(line) && !line.includes('(')) {
-        continue
-      }
-
-      const normalized = normalizeModTemplate(line, pendingKind, pendingTier)
+      const normalized = normalizeModTemplate(line)
       if (normalized.kind === 'fractured') fractured = true
       modifiers.push({
         raw: line,
@@ -329,8 +438,18 @@ export function parseItemText (rawText: string): ParsedItem | null {
         kind: normalized.kind,
         tier: normalized.tier
       })
-      pendingKind = undefined
-      pendingTier = undefined
+    }
+  }
+
+  // Estimate local % increased phys / defence for Q20 normalization
+  let localIncPhys = 0
+  let localIncDef = 0
+  for (const m of modifiers) {
+    if (/^#% increased Physical Damage$/i.test(m.template) && m.values.length > 0) {
+      localIncPhys += m.values[0]
+    }
+    if (/^#% increased (?:Armour|Evasion|Energy Shield|Armour and Evasion|Armour and Energy Shield|Evasion and Energy Shield|Armour, Evasion and Energy Shield)$/i.test(m.template) && m.values.length > 0) {
+      localIncDef += m.values[0]
     }
   }
 
@@ -339,12 +458,24 @@ export function parseItemText (rawText: string): ParsedItem | null {
     const physicalDps = Math.round(physAvg * aps)
     const elementalDps = Math.round(eleAvg * aps)
     const totalDps = Math.round((physAvg + eleAvg + chaosAvg) * aps)
-    weapon = { physicalDps, elementalDps, totalDps, aps, crit }
+    const mult = calcQ20Multiplier(quality, corrupted, localIncPhys)
+    const q20PhysicalDps = mult ? Math.round(physicalDps * mult) : undefined
+    const q20TotalDps = mult ? Math.round((physAvg * mult + eleAvg + chaosAvg) * aps) : undefined
+    weapon = { physicalDps, elementalDps, totalDps, aps, crit, q20PhysicalDps, q20TotalDps }
   }
 
   let armour: ArmourStats | undefined
   if (armourVal > 0 || evasionVal > 0 || esVal > 0 || wardVal > 0) {
-    armour = { armour: armourVal, evasion: evasionVal, energyShield: esVal, ward: wardVal }
+    const mult = calcQ20Multiplier(quality, corrupted, localIncDef)
+    armour = {
+      armour: armourVal,
+      evasion: evasionVal,
+      energyShield: esVal,
+      ward: wardVal,
+      q20Armour: mult && armourVal > 0 ? Math.round(armourVal * mult) : undefined,
+      q20Evasion: mult && evasionVal > 0 ? Math.round(evasionVal * mult) : undefined,
+      q20EnergyShield: mult && esVal > 0 ? Math.round(esVal * mult) : undefined
+    }
   }
 
   const tradeCategory = ITEM_CLASS_TO_CATEGORY[itemClass] ?? null
@@ -363,6 +494,13 @@ export function parseItemText (rawText: string): ParsedItem | null {
     corrupted,
     synthesised,
     fractured,
+    unidentified: unidentified || undefined,
+    mirrored: mirrored || undefined,
+    split: split || undefined,
+    influences: influences.length > 0 ? influences : undefined,
+    gemLevel,
+    mapTier,
+    blighted: blighted || undefined,
     weapon,
     armour,
     modifiers

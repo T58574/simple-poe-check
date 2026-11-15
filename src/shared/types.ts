@@ -8,7 +8,9 @@ export type ItemRarity =
   | 'Divination Card'
   | 'Unknown'
 
-export type ModifierKind = 'implicit' | 'explicit' | 'crafted' | 'fractured' | 'enchant'
+export type ModifierKind = 'implicit' | 'explicit' | 'crafted' | 'fractured' | 'enchant' | 'pseudo'
+
+export type TradeStatusOption = 'available' | 'securable' | 'online' | 'any'
 
 export interface ItemModifier {
   raw: string
@@ -25,6 +27,8 @@ export interface WeaponStats {
   totalDps: number
   aps: number
   crit: number
+  q20PhysicalDps?: number
+  q20TotalDps?: number
 }
 
 export interface ArmourStats {
@@ -32,6 +36,9 @@ export interface ArmourStats {
   evasion: number
   energyShield: number
   ward: number
+  q20Armour?: number
+  q20Evasion?: number
+  q20EnergyShield?: number
 }
 
 export interface ParsedItem {
@@ -48,6 +55,13 @@ export interface ParsedItem {
   corrupted: boolean
   synthesised: boolean
   fractured: boolean
+  unidentified?: boolean
+  mirrored?: boolean
+  split?: boolean
+  influences?: string[]
+  gemLevel?: number
+  mapTier?: number
+  blighted?: boolean
   weapon?: WeaponStats
   armour?: ArmourStats
   modifiers: ItemModifier[]
@@ -69,9 +83,25 @@ export interface MatchedModifier {
 export interface PriceListing {
   amount: number
   currency: string
+  chaosAmount?: number
   accountName: string
   indexed: string
   isInstantBuyout: boolean
+}
+
+export interface PriceSummary {
+  minChaos: number
+  medianChaos: number
+  minDivine?: number
+  medianDivine?: number
+  instantCount: number
+}
+
+export interface RateLimitStatus {
+  remaining: number
+  max: number
+  windowSec: number
+  blockedUntil: number
 }
 
 export interface PriceCheckResult {
@@ -79,10 +109,14 @@ export interface PriceCheckResult {
   item: ParsedItem
   chaosValue?: number
   divineValue?: number
+  ninjaAmbiguous?: boolean
+  ninjaVariantNote?: string
   totalResults?: number
   tradeUrl?: string
   listings: PriceListing[]
+  summary?: PriceSummary
   matchedMods: MatchedModifier[]
+  rateLimit?: RateLimitStatus
   error?: string
 }
 
@@ -100,6 +134,7 @@ export interface TradeSearchModFilter {
 export interface TradeSearchRequest {
   item: ParsedItem
   filters: TradeSearchModFilter[]
+  status?: TradeStatusOption
   useBaseType?: boolean
   useIlvl?: boolean
   useLinks?: boolean
@@ -118,13 +153,34 @@ export interface TradeSearchRequest {
   }
 }
 
+export interface ChatMacro {
+  id: string
+  label: string
+  hotkey: string
+  command: string
+  send: boolean
+}
+
+export const DEFAULT_CHAT_MACROS: ChatMacro[] = [
+  { id: 'hideout', label: 'Hideout', hotkey: 'F5', command: '/hideout', send: true },
+  { id: 'kingsmarch', label: 'Kingsmarch', hotkey: 'F6', command: '/kingsmarch', send: true },
+  { id: 'leave', label: 'Leave Party', hotkey: 'F9', command: '/leave', send: true },
+  { id: 'whisper-last', label: 'Whisper Last', hotkey: 'F7', command: '@last ', send: false }
+]
+
 export interface AppConfig {
   league: string
+  leagueInitialized?: boolean
   realm: 'pc'
   gameWindowTitle: string
   priceCheckHotkey: string
   hideoutHotkey: string
   closeHotkey: string
+  chatMacros: ChatMacro[]
+  tradeStatus: TradeStatusOption
+  poeSessId: string
+  autoSearchOnFilterChange: boolean
+  restoreClipboard: boolean
   ninjaCacheTtlMinutes: number
   statsCacheTtlHours: number
   tradeCacheTtlMinutes: number
@@ -135,11 +191,17 @@ export interface AppConfig {
 
 export const DEFAULT_CONFIG: AppConfig = {
   league: 'Standard',
+  leagueInitialized: false,
   realm: 'pc',
   gameWindowTitle: 'Path of Exile',
   priceCheckHotkey: 'Ctrl+D',
   hideoutHotkey: 'F5',
   closeHotkey: 'Escape',
+  chatMacros: DEFAULT_CHAT_MACROS,
+  tradeStatus: 'available',
+  poeSessId: '',
+  autoSearchOnFilterChange: true,
+  restoreClipboard: true,
   ninjaCacheTtlMinutes: 60,
   statsCacheTtlHours: 24,
   tradeCacheTtlMinutes: 5,
