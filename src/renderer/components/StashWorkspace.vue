@@ -53,6 +53,7 @@ const itemCategory = ref('All')
 const itemTabFilter = ref('All')
 const sortBy = ref<SortKey>('totalChaos')
 const sortDir = ref<'asc' | 'desc'>('desc')
+const copiedItemId = ref<string | null>(null)
 
 // Bulk filters
 const bulkCategory = ref('All')
@@ -87,7 +88,9 @@ const filteredItems = computed(() => {
   const snap = currentSnapshot.value
   if (!snap) return []
   const q = itemQuery.value.trim().toLowerCase()
+  const minChaos = props.config.minItemChaos ?? 0
   const filtered = snap.items.filter((item) => {
+    if (minChaos > 0 && item.totalChaos < minChaos) return false
     if (itemCategory.value !== 'All' && item.category !== itemCategory.value) return false
     if (itemTabFilter.value !== 'All' && item.tabName !== itemTabFilter.value) return false
     if (q && !item.name.toLowerCase().includes(q) && !item.tabName.toLowerCase().includes(q)) return false
@@ -134,6 +137,14 @@ function formatDiv (chaos: number, rate: number): string {
 
 function popOut (): void {
   window.poeCheck.popOutApp()
+}
+
+function copyItemName (name: string, key: string): void {
+  void navigator.clipboard.writeText(name)
+  copiedItemId.value = key
+  setTimeout(() => {
+    if (copiedItemId.value === key) copiedItemId.value = null
+  }, 1200)
 }
 
 const farmSummary = computed(() => {
@@ -325,6 +336,7 @@ function saveSettings (): void {
     tradeStatus: draft.value.tradeStatus as TradeStatusOption,
     poeSessId: draft.value.poeSessId.trim(),
     accountName: draft.value.accountName.trim(),
+    minItemChaos: Number(draft.value.minItemChaos) || 0,
     bulkMinChaos: Number(draft.value.bulkMinChaos) || 10,
     autoSearchOnFilterChange: draft.value.autoSearchOnFilterChange,
     restoreClipboard: draft.value.restoreClipboard,
@@ -548,7 +560,10 @@ onMounted(() => {
               {{ tName === 'All' ? 'All Tabs' : tName }}
             </option>
           </select>
-          <span class="ws-muted">{{ filteredItems.length }} items</span>
+          <span class="ws-muted">
+            {{ filteredItems.length }} items
+            <template v-if="(config.minItemChaos ?? 0) > 0"> (min {{ config.minItemChaos }}c)</template>
+          </span>
         </div>
 
         <!-- Priced Items Table -->
@@ -569,7 +584,15 @@ onMounted(() => {
               <tr v-for="item in filteredItems" :key="item.id">
                 <td class="item-cell">
                   <img v-if="item.icon" :src="item.icon" class="item-icon" alt="" />
-                  <span :class="`rarity-${item.rarity}`">{{ item.name }}</span>
+                  <span
+                    class="item-copy-name"
+                    :class="`rarity-${item.rarity}`"
+                    title="Click to copy name"
+                    @click="copyItemName(item.name, item.id)"
+                  >
+                    {{ item.name }}
+                  </span>
+                  <span v-if="copiedItemId === item.id" class="ws-copied-tag">Copied</span>
                 </td>
                 <td>{{ item.category }}</td>
                 <td class="ws-muted">{{ item.tabName }}</td>
@@ -797,7 +820,11 @@ onMounted(() => {
             <span>Account Name (for Stash API)</span>
             <input v-model="draft.accountName" type="text" class="ws-input" placeholder="e.g. ExileName" />
           </label>
-          <label class="ws-setting-field ws-span-2">
+          <label class="ws-setting-field">
+            <span>Min Item Price in Stash (c, 0 = show all)</span>
+            <input v-model.number="draft.minItemChaos" type="number" min="0" step="0.5" class="ws-input" />
+          </label>
+          <label class="ws-setting-field">
             <span>POESESSID (auto-filled on Sign in, or paste manually)</span>
             <input v-model="draft.poeSessId" type="password" class="ws-input" />
           </label>

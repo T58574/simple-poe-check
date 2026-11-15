@@ -58,7 +58,12 @@ export function classifyStashItem (raw: RawStashItem): {
   const links = countMaxLinks(raw.sockets)
   const type = raw.typeLine || raw.baseType || ''
   const lower = type.toLowerCase()
+  const baseLower = (raw.baseType || '').toLowerCase()
+  const iconLower = (raw.icon || '').toLowerCase()
 
+  if (iconLower.includes('bestiaryorb') || baseLower.includes('bestiary orb') || lower.includes('bestiary orb')) {
+    return { category: 'Beast', rarity, links }
+  }
   if (frame === 6) return { category: 'Divination Card', rarity, links }
   if (frame === 4) return { category: 'Skill Gem', rarity, links }
   if (frame === 3) return { category: 'Unique', rarity, links }

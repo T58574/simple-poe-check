@@ -1051,3 +1051,17 @@ button.mini-btn {
 .ws-table th.sortable:hover {
   color: var(--text);
 }
+
+.item-copy-name {
+  cursor: pointer;
+}
+
+.item-copy-name:hover {
+  text-decoration: underline;
+}
+
+.ws-copied-tag {
+  font-size: 11px;
+  color: var(--green);
+  font-weight: 600;
+}

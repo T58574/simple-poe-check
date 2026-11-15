@@ -293,7 +293,7 @@ export class PoeApiClient {
       return
     }
 
-    const cachePath = path.join(this.cacheDir, `ninja-v3-${sanitizeFilename(cfg.league)}.json`)
+    const cachePath = path.join(this.cacheDir, `ninja-v4-${sanitizeFilename(cfg.league)}.json`)
     if (!forceRefresh) {
       const cached = this.readCache<{ entries: Array<[string, NinjaEntry]>; divineChaosRate: number }>(
         cachePath,
@@ -315,7 +315,6 @@ export class PoeApiClient {
     const exchangeTypes = [
       'Currency',
       'Fragment',
-      'Scarab',
       'Essence',
       'Oil',
       'Fossil',
@@ -326,7 +325,9 @@ export class PoeApiClient {
       'Tattoo',
       'Omen',
       'Artifact',
-      'Vial'
+      'Vial',
+      'AllflameEmber',
+      'Runegraft'
     ]
     await Promise.all(
       exchangeTypes.map(async (type) => {
@@ -365,16 +366,22 @@ export class PoeApiClient {
       })
     )
 
-    // Stash Items (Uniques, Divination Cards, Skill Gems, Maps)
+    // Stash Items (Beasts, Scarabs, Uniques, Divination Cards, Skill Gems, Maps)
     const itemTypes = [
+      'Beast',
+      'Scarab',
       'UniqueWeapon',
       'UniqueArmour',
       'UniqueAccessory',
       'UniqueFlask',
       'UniqueJewel',
+      'UniqueMap',
+      'UniqueRelic',
       'DivinationCard',
       'SkillGem',
-      'Map'
+      'Map',
+      'BlightedMap',
+      'BlightRavagedMap'
     ]
     await Promise.all(
       itemTypes.map(async (type) => {
@@ -416,9 +423,17 @@ export class PoeApiClient {
             if (type === 'SkillGem') {
               const gKey = `gem::${baseKey}::${line.gemLevel ?? 1}::${line.gemQuality ?? 0}::${line.corrupted ? 1 : 0}`
               map.set(gKey, entry)
-            } else if (type === 'Map') {
+            } else if (type === 'Beast') {
+              map.set(`beast::${baseKey}`, entry)
+              if (!map.has(baseKey)) {
+                map.set(baseKey, entry)
+              }
+            } else if (type === 'Map' || type === 'BlightedMap' || type === 'BlightRavagedMap' || type === 'UniqueMap') {
               const mKey = `map::${baseKey}::t${line.mapTier ?? 0}`
               map.set(mKey, entry)
+              if (!map.has(baseKey)) {
+                map.set(baseKey, entry)
+              }
             } else if (type.startsWith('Unique')) {
               const linkBucket = line.links && line.links >= 5 ? line.links : 0
               const uKey = `unique::${baseKey}::${linkBucket}L`
@@ -465,6 +480,18 @@ export class PoeApiClient {
 
     if (rarity === 'Currency' && nameKey === 'chaos orb') {
       return { unitChaos: 1, key: 'currency::chaos orb' }
+    }
+
+    if (category === 'Beast') {
+      const entry =
+        this.ninjaCache.get(`beast::${nameKey}`) ??
+        this.ninjaCache.get(`beast::${baseKey}`) ??
+        this.ninjaCache.get(nameKey) ??
+        this.ninjaCache.get(baseKey)
+      return {
+        unitChaos: entry?.chaosValue ?? 0,
+        key: `beast::${nameKey || baseKey}`
+      }
     }
 
     if (rarity === 'Gem') {
