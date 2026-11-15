@@ -199,7 +199,8 @@ async function takeSnapshot (): Promise<void> {
   errorText.value = ''
   statusText.value = 'Scanning selected tabs and pricing via poe.ninja...'
   try {
-    const snap = await window.poeCheck.stashTakeSnapshot(props.config.selectedStashTabIds)
+    const plainTabIds = [...(props.config.selectedStashTabIds ?? [])]
+    const snap = await window.poeCheck.stashTakeSnapshot(plainTabIds)
     snapshots.value = [snap, ...snapshots.value]
     selectedSnapshotId.value = snap.id
     if (snapshots.value.length >= 2 && !baselineSnapshotId.value) {

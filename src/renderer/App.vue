@@ -191,7 +191,7 @@ async function openSettings (forceOpen?: boolean): Promise<void> {
 }
 
 async function saveSettings (): Promise<void> {
-  config.value = await window.poeCheck.saveConfig({ ...config.value })
+  config.value = await window.poeCheck.saveConfig(JSON.parse(JSON.stringify(config.value)))
   statusMessage.value = 'Saved'
   setTimeout(() => { statusMessage.value = '' }, 1500)
 }
@@ -266,7 +266,7 @@ function openTradeInBrowser (): void {
 }
 
 async function handleWorkspaceSaveConfig (partial: Partial<AppConfig>): Promise<void> {
-  const saved = await window.poeCheck.saveConfig(partial)
+  const saved = await window.poeCheck.saveConfig(JSON.parse(JSON.stringify(partial)))
   config.value = saved
   tradeStatus.value = saved.tradeStatus ?? 'available'
 }

@@ -1,6 +1,6 @@
 # Project Journal
 
-- `last_updated`: `2026-11-15T22:57:19Z`
+- `last_updated`: `2026-11-15T22:59:19Z`
 - `scope`: `simple-poe-check` (Electron + Vue 3 Path of Exile price checker, stash tracker, farm profit analyzer, and bulk listing overlay)
 - `owner`: project maintainers
 
@@ -9,7 +9,7 @@
 - **2026-11-15** | Price-check overlay opens at full viewport height (`100vh`) and positions adjacent to cursor (`28px` offset right or left based on cursor half) in `src/main/overlay.ts` and `src/renderer/App.vue` | `verified-this-turn` | `npm test` (11/11) and `npm run build` passed; live in-game positioning pending user verification.
 - **2026-11-15** | Stash scanning uses `character-window/get-stash-items` via `PoeApiClient` (`PolicyRateLimiter`) and prices items locally against `poe.ninja` categories; auth (`POESESSID`), `/api/profile`, and tab listing verified live in PoE overlay | `verified-earlier` | User screenshot confirmed account resolution and colored tab list.
 - **2026-11-15** | Snapshots, farm-session `chaos/hr` & `div/hr` diffs, and bulk aggregation are implemented in `src/shared/stashValuation.ts` and persisted locally in `userData/stash-snapshots.json` (max 100) | `verified-earlier` | Unit-tested in `tests/stashValuation.test.ts`.
-- **2026-11-15** | Fixed `An object could not be cloned.` on `Take Snapshot` / `Save Config` by stripping Vue 3 reactive Proxies via `JSON.parse(JSON.stringify(...))` in `src/main/preload.ts` | `verified-earlier` | `npm test` (11/11) and `npm run build` passed.
+- **2026-11-15** | Fixed `An object could not be cloned.` on `Take Snapshot` / `Save Config` by unwrapping Vue 3 reactive Proxies in the renderer (`src/renderer/components/StashWorkspace.vue`, `src/renderer/App.vue`) before crossing Electron `contextBridge` (which clones arguments before `preload.ts` runs) | `verified-this-turn` | `npm test` (11/11) and `npm run build` passed.
 
 ## Active Decisions
 - **2026-11-15** | **POESESSID over OAuth 2.1 for now** | GGG OAuth registration requires manual approval (`oauth@grindinggear.com`) and user prefers not to scaffold OAuth yet | `verified-earlier` | Next review: if GGG restricts `character-window` or user registers an OAuth client.
