@@ -1,6 +1,7 @@
 import { app, net } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { normalizeModTemplate } from '../shared/itemParser'
 import { calcDefaultMinFilter, StatMatcher } from '../shared/statMatcher'
 import { classifyStashItem, type RawStashItem } from '../shared/stashValuation'
 import type {
@@ -576,7 +577,29 @@ export class PoeApiClient {
   private buildMatchedMods (item: ParsedItem): MatchedModifier[] {
     if (!this.matcher) return []
     const isLocalItem = Boolean(item.weapon || item.armour)
-    const rawMatched = mergeMatchedMods(this.matcher.matchAll(item.modifiers, { isLocalItem }))
+    const expanded: MatchedModifier[] = []
+    for (const mod of item.modifiers) {
+      const m = this.matcher.matchModifier(mod, { isLocalItem })
+      if (!m.statId && mod.raw.includes('\n')) {
+        const subLines = mod.raw.split('\n').map((s) => s.trim()).filter(Boolean)
+        if (subLines.length > 1) {
+          for (const sub of subLines) {
+            const norm = normalizeModTemplate(sub, mod.kind, mod.tier)
+            expanded.push(this.matcher.matchModifier({
+              raw: sub,
+              display: norm.display,
+              template: norm.template,
+              values: norm.values,
+              kind: norm.kind,
+              tier: norm.tier
+            }, { isLocalItem }))
+          }
+          continue
+        }
+      }
+      expanded.push(m)
+    }
+    const rawMatched = mergeMatchedMods(expanded)
     const pseudos = this.matcher.computePseudoMods(rawMatched)
     return [...pseudos, ...rawMatched]
   }
@@ -751,8 +774,23 @@ export class PoeApiClient {
       }
     }
 
-    if (req.useLinks && req.item.maxLinks >= 5) {
-      filters.socket_filters = { filters: { links: { min: req.item.maxLinks } } }
+    const sf: Record<string, unknown> = {}
+    if (req.socketFilters) {
+      const socketsObj: Record<string, number> = {}
+      if (req.socketFilters.socketsMin && req.socketFilters.socketsMin > 0) socketsObj.min = req.socketFilters.socketsMin
+      if (req.socketFilters.r && req.socketFilters.r > 0) socketsObj.r = req.socketFilters.r
+      if (req.socketFilters.g && req.socketFilters.g > 0) socketsObj.g = req.socketFilters.g
+      if (req.socketFilters.b && req.socketFilters.b > 0) socketsObj.b = req.socketFilters.b
+      if (req.socketFilters.w && req.socketFilters.w > 0) socketsObj.w = req.socketFilters.w
+      if (Object.keys(socketsObj).length > 0) sf.sockets = socketsObj
+      if (req.socketFilters.linksMin && req.socketFilters.linksMin > 0) {
+        sf.links = { min: req.socketFilters.linksMin }
+      }
+    } else if (req.useLinks && req.item.maxLinks >= 5) {
+      sf.links = { min: req.item.maxLinks }
+    }
+    if (Object.keys(sf).length > 0) {
+      filters.socket_filters = { filters: sf }
     }
 
     const miscFilters: Record<string, unknown> = {}
