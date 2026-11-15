@@ -1,13 +1,14 @@
 # Project Journal
 
-- `last_updated`: `2026-11-15T22:59:19Z`
+- `last_updated`: `2026-11-15T23:16:24Z`
 - `scope`: `simple-poe-check` (Electron + Vue 3 Path of Exile price checker, stash tracker, farm profit analyzer, and bulk listing overlay)
 - `owner`: project maintainers
 
 ## Current State
 - **2026-11-15** | Overlay app (`Ctrl+Space`, hidden on startup via `show: false`) and cursor price-check (`Ctrl+D`) are integrated in `src/main/overlay.ts`, `src/main/hotkeys.ts`, and `src/renderer/App.vue` | `verified-earlier` | `npm test` (11/11) and `npm run build` passed on commit `69bc55a`.
 - **2026-11-15** | Price-check overlay opens at full viewport height (`100vh`) and positions adjacent to cursor (`28px` offset right or left based on cursor half) in `src/main/overlay.ts` and `src/renderer/App.vue` | `verified-this-turn` | `npm test` (11/11) and `npm run build` passed; live in-game positioning pending user verification.
-- **2026-11-15** | Stash scanning uses `character-window/get-stash-items` via `PoeApiClient` (`PolicyRateLimiter`) and prices items locally against `poe.ninja` categories; auth (`POESESSID`), `/api/profile`, and tab listing verified live in PoE overlay | `verified-earlier` | User screenshot confirmed account resolution and colored tab list.
+- **2026-11-15** | Migrated `poe.ninja` client (`src/main/poeApi.ts`, cache `ninja-v3-*.json`) to `poe1/api/economy/exchange/current/overview` and `poe1/api/economy/stash/current/item/overview` after verifying live `Covens` JSON; fixed `Divine Orb` rate (`core.rates.divine` / `divine` line) and all currency/item pricing | `verified-this-turn` | Live `curl` verified `Covens` schema; `npm test` and `npm run build` passed.
+- **2026-11-15** | Added Stash table sorting (`name`, `tabName`, `stackSize`, `unitChaos`, `totalChaos`), tab filter, `Total (div)` column, and `Pop Out` standalone movable window (`?detached=1`) in `src/main/overlay.ts`, `src/renderer/components/StashWorkspace.vue`, and `src/renderer/App.vue` | `verified-this-turn` | `npm test` (11/11) and `npm run build` passed.
 - **2026-11-15** | Snapshots, farm-session `chaos/hr` & `div/hr` diffs, and bulk aggregation are implemented in `src/shared/stashValuation.ts` and persisted locally in `userData/stash-snapshots.json` (max 100) | `verified-earlier` | Unit-tested in `tests/stashValuation.test.ts`.
 - **2026-11-15** | Fixed `An object could not be cloned.` on `Take Snapshot` / `Save Config` by unwrapping Vue 3 reactive Proxies in the renderer (`src/renderer/components/StashWorkspace.vue`, `src/renderer/App.vue`) before crossing Electron `contextBridge` (which clones arguments before `preload.ts` runs) | `verified-this-turn` | `npm test` (11/11) and `npm run build` passed.
 

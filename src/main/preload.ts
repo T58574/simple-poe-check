@@ -28,6 +28,7 @@ export interface PoeCheckApi {
   stashTakeSnapshot: (tabIds?: string[]) => Promise<StashSnapshot>
   stashGetSnapshots: (league?: string) => Promise<StashSnapshot[]>
   stashDeleteSnapshot: (id: string) => Promise<StashSnapshot[]>
+  popOutApp: () => void
 }
 
 const api: PoeCheckApi = {
@@ -61,7 +62,8 @@ const api: PoeCheckApi = {
   stashTakeSnapshot: (tabIds) =>
     ipcRenderer.invoke(IPC_CHANNELS.STASH_TAKE_SNAPSHOT, tabIds ? JSON.parse(JSON.stringify(tabIds)) : undefined),
   stashGetSnapshots: (league) => ipcRenderer.invoke(IPC_CHANNELS.STASH_GET_SNAPSHOTS, league),
-  stashDeleteSnapshot: (id) => ipcRenderer.invoke(IPC_CHANNELS.STASH_DELETE_SNAPSHOT, id)
+  stashDeleteSnapshot: (id) => ipcRenderer.invoke(IPC_CHANNELS.STASH_DELETE_SNAPSHOT, id),
+  popOutApp: () => ipcRenderer.send(IPC_CHANNELS.STASH_POP_OUT)
 }
 
 contextBridge.exposeInMainWorld('poeCheck', api)

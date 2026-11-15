@@ -5,6 +5,8 @@ import { IPC_CHANNELS, type OverlayStatePayload } from '../shared/types'
 
 export class OverlayWindowManager {
   private win: BrowserWindow | null = null
+  private detachedWin: BrowserWindow | null = null
+  private devServerUrl?: string
   private gameActive = false
   private overlayVisible = false
   private currentMode: 'price-check' | 'app' | 'settings' = 'price-check'
@@ -20,6 +22,7 @@ export class OverlayWindowManager {
   }
 
   create (gameTitle: string, devServerUrl?: string): BrowserWindow {
+    this.devServerUrl = devServerUrl
     this.win = new BrowserWindow({
       ...OVERLAY_WINDOW_OPTS,
       show: false,
@@ -127,6 +130,44 @@ export class OverlayWindowManager {
 
   showStandalone (): void {
     this.showApp('settings')
+  }
+
+  openDetachedApp (): void {
+    if (this.detachedWin && !this.detachedWin.isDestroyed()) {
+      this.detachedWin.show()
+      this.detachedWin.focus()
+      return
+    }
+
+    this.hide()
+    const win = new BrowserWindow({
+      width: 1180,
+      height: 800,
+      minWidth: 820,
+      minHeight: 560,
+      title: 'Simple PoE Check',
+      backgroundColor: '#141413',
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+    this.detachedWin = win
+
+    if (this.devServerUrl) {
+      const sep = this.devServerUrl.includes('?') ? '&' : '?'
+      void win.loadURL(`${this.devServerUrl}${sep}detached=1`)
+    } else {
+      void win.loadFile(path.join(__dirname, '../dist-renderer/index.html'), {
+        query: { detached: '1' }
+      })
+    }
+
+    win.on('closed', () => {
+      this.detachedWin = null
+    })
   }
 
   hide (): void {

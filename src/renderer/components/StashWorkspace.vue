@@ -17,6 +17,7 @@ import type {
 const props = defineProps<{
   config: AppConfig
   leagues: string[]
+  detached?: boolean
   initialSection?: 'stash' | 'farm' | 'bulk' | 'settings'
 }>()
 
@@ -45,9 +46,13 @@ const busySnap = ref(false)
 const statusText = ref('')
 const errorText = ref('')
 
-// Stash filters
+// Stash filters & sorting
+type SortKey = 'name' | 'tabName' | 'stackSize' | 'unitChaos' | 'totalChaos'
 const itemQuery = ref('')
 const itemCategory = ref('All')
+const itemTabFilter = ref('All')
+const sortBy = ref<SortKey>('totalChaos')
+const sortDir = ref<'asc' | 'desc'>('desc')
 
 // Bulk filters
 const bulkCategory = ref('All')
@@ -70,16 +75,66 @@ const categories = computed(() => {
   return Array.from(set)
 })
 
+const snapshotTabs = computed(() => {
+  const set = new Set<string>(['All'])
+  for (const item of currentSnapshot.value?.items ?? []) {
+    set.add(item.tabName)
+  }
+  return Array.from(set)
+})
+
 const filteredItems = computed(() => {
   const snap = currentSnapshot.value
   if (!snap) return []
   const q = itemQuery.value.trim().toLowerCase()
-  return snap.items.filter((item) => {
+  const filtered = snap.items.filter((item) => {
     if (itemCategory.value !== 'All' && item.category !== itemCategory.value) return false
+    if (itemTabFilter.value !== 'All' && item.tabName !== itemTabFilter.value) return false
     if (q && !item.name.toLowerCase().includes(q) && !item.tabName.toLowerCase().includes(q)) return false
     return true
   })
+
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  return [...filtered].sort((a, b) => {
+    switch (sortBy.value) {
+      case 'name':
+        return a.name.localeCompare(b.name) * dir
+      case 'tabName':
+        return a.tabName.localeCompare(b.tabName) * dir
+      case 'stackSize':
+        return (a.stackSize - b.stackSize) * dir
+      case 'unitChaos':
+        return (a.unitChaos - b.unitChaos) * dir
+      case 'totalChaos':
+      default:
+        return (a.totalChaos - b.totalChaos) * dir
+    }
+  })
 })
+
+function toggleSort (col: SortKey): void {
+  if (sortBy.value === col) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = col
+    sortDir.value = col === 'name' || col === 'tabName' ? 'asc' : 'desc'
+  }
+}
+
+function sortArrow (col: SortKey): string {
+  if (sortBy.value !== col) return ''
+  return sortDir.value === 'asc' ? ' ▲' : ' ▼'
+}
+
+function formatDiv (chaos: number, rate: number): string {
+  if (!rate || rate <= 0 || chaos <= 0) return '-'
+  const val = chaos / rate
+  return val >= 0.01 ? val.toFixed(2) : '<0.01'
+}
+
+function popOut (): void {
+  window.poeCheck.popOutApp()
+}
 
 const farmSummary = computed(() => {
   if (snapshots.value.length < 2) return null
@@ -313,13 +368,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="ws-shell">
+  <div class="ws-shell" :class="{ detached: props.detached }">
     <!-- Top Header -->
     <header class="ws-header">
       <div class="ws-brand">
         <span class="ws-brand-dot" />
         <span class="ws-title">Simple PoE Check</span>
-        <span class="ws-shortcut-hint">{{ config.toggleAppHotkey }}</span>
+        <span v-if="!props.detached" class="ws-shortcut-hint">{{ config.toggleAppHotkey }}</span>
       </div>
 
       <div class="ws-header-controls">
@@ -338,6 +393,7 @@ onMounted(() => {
         </button>
 
         <button class="ws-btn" @click="emit('refresh-cache')">Refresh Ninja</button>
+        <button v-if="!props.detached" class="ws-btn" @click="popOut">Pop Out</button>
         <button class="ws-btn ws-btn-close" @click="emit('close')">Close</button>
       </div>
     </header>
@@ -487,6 +543,11 @@ onMounted(() => {
           <select v-model="itemCategory" class="ws-select">
             <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
           </select>
+          <select v-model="itemTabFilter" class="ws-select">
+            <option v-for="tName in snapshotTabs" :key="tName" :value="tName">
+              {{ tName === 'All' ? 'All Tabs' : tName }}
+            </option>
+          </select>
           <span class="ws-muted">{{ filteredItems.length }} items</span>
         </div>
 
@@ -495,12 +556,13 @@ onMounted(() => {
           <table class="ws-table">
             <thead>
               <tr>
-                <th>Item</th>
+                <th class="sortable" @click="toggleSort('name')">Item{{ sortArrow('name') }}</th>
                 <th>Category</th>
-                <th>Tab</th>
-                <th class="num">Qty</th>
-                <th class="num">Unit (c)</th>
-                <th class="num">Total (c)</th>
+                <th class="sortable" @click="toggleSort('tabName')">Tab{{ sortArrow('tabName') }}</th>
+                <th class="num sortable" @click="toggleSort('stackSize')">Qty{{ sortArrow('stackSize') }}</th>
+                <th class="num sortable" @click="toggleSort('unitChaos')">Unit (c){{ sortArrow('unitChaos') }}</th>
+                <th class="num sortable" @click="toggleSort('totalChaos')">Total (c){{ sortArrow('totalChaos') }}</th>
+                <th class="num sortable" @click="toggleSort('totalChaos')">Total (div){{ sortArrow('totalChaos') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -514,6 +576,7 @@ onMounted(() => {
                 <td class="num">{{ item.stackSize }}</td>
                 <td class="num">{{ item.unitChaos }}</td>
                 <td class="num accent-orange">{{ item.totalChaos }}</td>
+                <td class="num accent-blue">{{ formatDiv(item.totalChaos, currentSnapshot.divineRate) }}</td>
               </tr>
             </tbody>
           </table>
