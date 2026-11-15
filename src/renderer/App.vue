@@ -134,7 +134,7 @@ async function runSearch (): Promise<void> {
     if (armourEnabled.es && armourMins.es) armourFilters.es = { min: armourMins.es }
 
     const updated = await window.poeCheck.searchTrade({
-      item: result.value.item,
+      item: JSON.parse(JSON.stringify(result.value.item)),
       filters,
       useBaseType: useBaseType.value,
       useIlvl: useIlvl.value,
@@ -144,6 +144,13 @@ async function runSearch (): Promise<void> {
       armourFilters: Object.keys(armourFilters).length > 0 ? armourFilters : undefined
     })
     result.value = updated
+  } catch (err) {
+    if (result.value) {
+      result.value = {
+        ...result.value,
+        error: err instanceof Error ? err.message : String(err)
+      }
+    }
   } finally {
     loading.value = false
   }

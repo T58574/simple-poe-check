@@ -36,7 +36,7 @@ const api: PoeCheckApi = {
     ipcRenderer.on(IPC_CHANNELS.OVERLAY_STATE, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.OVERLAY_STATE, listener)
   },
-  searchTrade: (req) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_TRADE, req),
+  searchTrade: (req) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_TRADE, JSON.parse(JSON.stringify(req))),
   hideOverlay: () => ipcRenderer.send(IPC_CHANNELS.HIDE_OVERLAY),
   openExternal: (url) => ipcRenderer.send(IPC_CHANNELS.OPEN_EXTERNAL, url),
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONFIG),
