@@ -392,6 +392,7 @@ onUnmounted(() => {
           </span>
         </div>
         <div class="actions">
+          <button class="icon-btn" @click="overlayMode = 'app'">Stash</button>
           <button class="icon-btn" @click="openSettings()">
             {{ showSettings ? 'Back' : 'Settings' }}
           </button>
