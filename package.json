@@ -2,7 +2,20 @@
   "name": "simple-poe-check",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "author": {
+    "name": "T58574",
+    "url": "https://github.com/T58574"
+  },
   "description": "Lightweight Path of Exile price checker and hideout hotkey overlay",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/T58574/simple-poe-check.git"
+  },
+  "homepage": "https://github.com/T58574/simple-poe-check#readme",
+  "bugs": {
+    "url": "https://github.com/T58574/simple-poe-check/issues"
+  },
   "main": "dist-main/index.js",
   "scripts": {
     "dev:renderer": "vite",
@@ -11,7 +24,7 @@
     "build:main": "tsc --noEmit -p tsconfig.main.json && node scripts/build-main.mjs",
     "build": "npm run build:renderer && npm run build:main",
     "test": "node scripts/run-tests.mjs",
-    "package:win": "npm run build && electron-builder --win"
+    "package:win": "npm run build && electron-builder --win --publish never"
   },
   "dependencies": {
     "electron-overlay-window": "^4.1.0",
@@ -31,6 +44,7 @@
   "build": {
     "appId": "com.simplepoecheck.app",
     "productName": "Simple PoE Check",
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },
@@ -39,10 +53,21 @@
       "dist-renderer/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "**/node_modules/uiohook-napi/prebuilds/**",
+      "**/node_modules/electron-overlay-window/prebuilds/**"
+    ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
-        "portable"
-      ]
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Simple-PoE-Check-${version}-portable.${ext}"
     }
   }
 }

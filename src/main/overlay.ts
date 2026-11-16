@@ -35,6 +35,13 @@ export class OverlayWindowManager {
       }
     })
 
+    this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    this.win.webContents.on('will-navigate', (event, url) => {
+      if (this.devServerUrl && url.startsWith(this.devServerUrl)) return
+      if (url.startsWith('file://')) return
+      event.preventDefault()
+    })
+
     if (devServerUrl) {
       void this.win.loadURL(devServerUrl)
     } else {
@@ -155,6 +162,12 @@ export class OverlayWindowManager {
       }
     })
     this.detachedWin = win
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    win.webContents.on('will-navigate', (event, url) => {
+      if (this.devServerUrl && url.startsWith(this.devServerUrl)) return
+      if (url.startsWith('file://')) return
+      event.preventDefault()
+    })
 
     if (this.devServerUrl) {
       const sep = this.devServerUrl.includes('?') ? '&' : '?'

@@ -246,7 +246,12 @@ export class HotkeyManager {
       }
     })
 
-    uIOhook.start()
+    try {
+      uIOhook.start()
+    } catch (err) {
+      this.started = false
+      console.error('[hotkeys] failed to start uIOhook:', err)
+    }
   }
 
   stop (): void {
