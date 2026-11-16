@@ -323,6 +323,14 @@ export interface OverlayStatePayload {
   y?: number
 }
 
+export interface UpdateCheckResult {
+  currentVersion: string
+  latestVersion: string | null
+  updateAvailable: boolean
+  releaseUrl: string
+  error?: string
+}
+
 export const IPC_CHANNELS = {
   PRICE_CHECK_RESULT: 'price-check:result',
   PRICE_CHECK_LOADING: 'price-check:loading',
@@ -342,5 +350,7 @@ export const IPC_CHANNELS = {
   STASH_TAKE_SNAPSHOT: 'stash:take-snapshot',
   STASH_GET_SNAPSHOTS: 'stash:get-snapshots',
   STASH_DELETE_SNAPSHOT: 'stash:delete-snapshot',
-  STASH_POP_OUT: 'stash:pop-out'
+  STASH_POP_OUT: 'stash:pop-out',
+  GET_APP_VERSION: 'app:get-version',
+  CHECK_UPDATES: 'app:check-updates'
 } as const

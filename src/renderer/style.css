@@ -1213,3 +1213,47 @@ button.mini-btn {
   color: var(--muted);
   padding: 0 2px;
 }
+
+.settings-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.settings-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-btn:hover {
+  opacity: 0.85;
+}
+
+.settings-update-status {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.update-available {
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

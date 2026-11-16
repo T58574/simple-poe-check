@@ -8,7 +8,8 @@ import {
   type StashAuthStatus,
   type StashSnapshot,
   type StashTabInfo,
-  type TradeSearchRequest
+  type TradeSearchRequest,
+  type UpdateCheckResult
 } from '../shared/types'
 
 export interface PoeCheckApi {
@@ -31,6 +32,8 @@ export interface PoeCheckApi {
   stashGetSnapshots: (league?: string) => Promise<StashSnapshot[]>
   stashDeleteSnapshot: (id: string) => Promise<StashSnapshot[]>
   popOutApp: () => void
+  getAppVersion: () => Promise<string>
+  checkUpdates: () => Promise<UpdateCheckResult>
 }
 
 const api: PoeCheckApi = {
@@ -66,7 +69,9 @@ const api: PoeCheckApi = {
     ipcRenderer.invoke(IPC_CHANNELS.STASH_TAKE_SNAPSHOT, tabIds ? JSON.parse(JSON.stringify(tabIds)) : undefined),
   stashGetSnapshots: (league) => ipcRenderer.invoke(IPC_CHANNELS.STASH_GET_SNAPSHOTS, league),
   stashDeleteSnapshot: (id) => ipcRenderer.invoke(IPC_CHANNELS.STASH_DELETE_SNAPSHOT, id),
-  popOutApp: () => ipcRenderer.send(IPC_CHANNELS.STASH_POP_OUT)
+  popOutApp: () => ipcRenderer.send(IPC_CHANNELS.STASH_POP_OUT),
+  getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
+  checkUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_UPDATES)
 }
 
 contextBridge.exposeInMainWorld('poeCheck', api)

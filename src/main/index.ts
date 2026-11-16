@@ -1,4 +1,4 @@
-import { app, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
 import { parseItemText } from '../shared/itemParser'
 import { IPC_CHANNELS, type AppConfig, type TradeSearchRequest } from '../shared/types'
 import { ConfigStore } from './config'
@@ -6,6 +6,7 @@ import { HotkeyManager } from './hotkeys'
 import { OverlayWindowManager } from './overlay'
 import { PoeApiClient } from './poeApi'
 import { StashService } from './stashService'
+import { checkForUpdates } from './updateChecker'
 
 let tray: Tray | null = null
 
@@ -135,6 +136,8 @@ async function main (): Promise<void> {
   ipcMain.handle(IPC_CHANNELS.STASH_GET_SNAPSHOTS, (_e, league?: string) => stashService.getSnapshots(league))
   ipcMain.handle(IPC_CHANNELS.STASH_DELETE_SNAPSHOT, (_e, id: string) => stashService.deleteSnapshot(id))
   ipcMain.on(IPC_CHANNELS.STASH_POP_OUT, () => overlay.openDetachedApp())
+  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => app.getVersion())
+  ipcMain.handle(IPC_CHANNELS.CHECK_UPDATES, () => checkForUpdates(app.getVersion()))
 
   // Auto-select active challenge league on first run, then warm up caches
   void (async () => {
@@ -152,6 +155,26 @@ async function main (): Promise<void> {
       // Non-fatal background warmup
     }
   })()
+
+  // Silent startup update check (notifies only when a newer release exists)
+  setTimeout(() => {
+    void (async () => {
+      const update = await checkForUpdates(app.getVersion())
+      if (!update.updateAvailable || !update.latestVersion) return
+      const { response } = await dialog.showMessageBox({
+        type: 'info',
+        title: 'Simple PoE Check — Update Available',
+        message: `New version v${update.latestVersion} is available!`,
+        detail: `You are currently running v${update.currentVersion}. Download the latest portable .exe from GitHub Releases?`,
+        buttons: ['Download Update', 'Later'],
+        defaultId: 0,
+        cancelId: 1
+      })
+      if (response === 0) {
+        void shell.openExternal(update.releaseUrl)
+      }
+    })()
+  }, 4000)
 
   // Tray
   tray = new Tray(createTrayIcon())

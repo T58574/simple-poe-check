@@ -10,7 +10,8 @@ import {
   type PriceCheckResult,
   type PriceListing,
   type TradeSearchRequest,
-  type TradeStatusOption
+  type TradeStatusOption,
+  type UpdateCheckResult
 } from '@shared/types'
 
 const isDetached = new URLSearchParams(window.location.search).get('detached') === '1'
@@ -24,6 +25,9 @@ const showSettings = ref(false)
 const config = ref<AppConfig>({ ...DEFAULT_CONFIG })
 const leagues = ref<string[]>(['Standard', 'Hardcore'])
 const statusMessage = ref('')
+const appVersion = ref('')
+const checkingUpdates = ref(false)
+const updateResult = ref<UpdateCheckResult | null>(null)
 const copiedIdx = ref<number | null>(null)
 const modsCollapsed = ref(false)
 const showUnmatchedMods = ref(false)
@@ -393,9 +397,32 @@ function formatAge (iso: string): string {
   return `${Math.floor(diffHr / 24)}d`
 }
 
+function openGitHub (): void {
+  window.poeCheck.openExternal('https://github.com/T58574/simple-poe-check')
+}
+
+function openReleaseUrl (): void {
+  if (updateResult.value?.releaseUrl) {
+    window.poeCheck.openExternal(updateResult.value.releaseUrl)
+  }
+}
+
+async function checkUpdates (): Promise<void> {
+  if (checkingUpdates.value) return
+  checkingUpdates.value = true
+  try {
+    updateResult.value = await window.poeCheck.checkUpdates()
+  } finally {
+    checkingUpdates.value = false
+  }
+}
+
 onMounted(async () => {
   config.value = await window.poeCheck.getConfig()
   tradeStatus.value = config.value.tradeStatus ?? 'available'
+  void window.poeCheck.getAppVersion().then((v) => {
+    appVersion.value = v
+  }).catch(() => undefined)
   if (isDetached) {
     void window.poeCheck.getLeagues().then((l) => {
       if (l.length > 0) leagues.value = l
@@ -616,6 +643,33 @@ onUnmounted(() => {
             <button class="primary" @click="saveSettings">Save Config</button>
             <button @click="refreshCache">Refresh Cache</button>
             <span v-if="statusMessage" class="price-sub">{{ statusMessage }}</span>
+          </div>
+
+          <div class="settings-footer">
+            <div class="settings-footer-left">
+              <span>Simple PoE Check {{ appVersion ? `v${appVersion}` : '' }}</span>
+              <span>·</span>
+              <button type="button" class="link-btn" @click="openGitHub">GitHub</button>
+            </div>
+            <div class="settings-footer-right">
+              <button type="button" class="mini-btn" :disabled="checkingUpdates" @click="checkUpdates">
+                {{ checkingUpdates ? 'Checking...' : 'Check for Updates' }}
+              </button>
+            </div>
+          </div>
+          <div v-if="updateResult" class="settings-update-status">
+            <span v-if="updateResult.error" class="price-sub">Update check failed: {{ updateResult.error }}</span>
+            <span v-else-if="updateResult.updateAvailable" class="update-available">
+              New version v{{ updateResult.latestVersion }} available!
+              <button
+                type="button"
+                class="link-btn"
+                @click="openReleaseUrl"
+              >
+                Download
+              </button>
+            </span>
+            <span v-else class="price-sub">You are on the latest version (v{{ updateResult.currentVersion }}).</span>
           </div>
         </section>
 
