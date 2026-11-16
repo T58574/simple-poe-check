@@ -12,14 +12,14 @@ Lightweight, open-source Path of Exile overlay combining instant item price-chec
 ## Screenshots
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/5a76087e-015f-461b-a32d-f892c7664bdf" alt="In-Game Price Check Overlay (Ctrl+D)" width="860" />
+  <img src="https://github.com/user-attachments/assets/970ce01c-dc25-4b7f-a9e6-35857b97ada2" alt="In-Game Price Check Overlay (Ctrl+D)" width="860" />
   <br />
   <sub><b>In-Game Price Check (<code>Ctrl+D</code>)</b> — instant Trade API &amp; poe.ninja pricing with tier-aware mod filters</sub>
 </p>
 
 | Stash & Net Worth (`Ctrl+Space`) | Settings & Hotkeys |
 |---|---|
-| <img src="https://github.com/user-attachments/assets/52f1d07c-c390-4864-a69d-08fee21c03d4" alt="Stash and Net Worth Tracker" width="430" /> | <img src="https://github.com/user-attachments/assets/ddb69f38-a780-47a8-8afe-eab81717c77f" alt="Settings and Hotkeys" width="430" /> |
+| <img src="https://github.com/user-attachments/assets/da2d33f4-7bce-4fa3-8b43-fd8aa65e9baa" alt="Stash and Net Worth Tracker" width="430" /> | <img src="https://github.com/user-attachments/assets/1a129fef-ed0d-41ec-a50c-19bbb3df8b72" alt="Settings and Hotkeys" width="430" /> |
 
 ## Requirements
 
