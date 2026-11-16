@@ -12,7 +12,8 @@ import type {
   StashAuthStatus,
   StashSnapshot,
   StashTabInfo,
-  TradeStatusOption
+  TradeStatusOption,
+  UpdateCheckResult
 } from '@shared/types'
 
 const props = defineProps<{
@@ -420,6 +421,29 @@ function onLeagueChange (ev: Event): void {
 }
 
 const busyNinja = ref(false)
+const appVersion = ref('')
+const checkingUpdates = ref(false)
+const updateResult = ref<UpdateCheckResult | null>(null)
+
+function openGitHub (): void {
+  window.poeCheck.openExternal('https://github.com/T58574/simple-poe-check')
+}
+
+function openReleaseUrl (): void {
+  if (updateResult.value?.releaseUrl) {
+    window.poeCheck.openExternal(updateResult.value.releaseUrl)
+  }
+}
+
+async function checkUpdates (): Promise<void> {
+  if (checkingUpdates.value) return
+  checkingUpdates.value = true
+  try {
+    updateResult.value = await window.poeCheck.checkUpdates()
+  } finally {
+    checkingUpdates.value = false
+  }
+}
 
 async function refreshNinjaPrices (): Promise<void> {
   busyNinja.value = true
@@ -451,6 +475,9 @@ function tabColorStyle (tab: StashTabInfo): Record<string, string> {
 onMounted(() => {
   void loadInitial()
   void refreshRateLimits()
+  void window.poeCheck.getAppVersion().then((v) => {
+    appVersion.value = v
+  }).catch(() => undefined)
   rateTicker = setInterval(() => {
     if (stashWaitSec.value > 0 || (rateLimits.value.stash?.blockedUntil ?? 0) > nowMs.value) {
       nowMs.value = Date.now()
@@ -1000,6 +1027,27 @@ onUnmounted(() => {
             Restore clipboard after check
           </label>
           <button class="ws-btn ws-btn-accent" @click="saveSettings">Save Settings</button>
+        </div>
+
+        <div class="settings-footer">
+          <div class="settings-footer-left">
+            <span>Simple PoE Check {{ appVersion ? `v${appVersion}` : '' }}</span>
+            <span>·</span>
+            <button type="button" class="link-btn" @click="openGitHub">GitHub</button>
+          </div>
+          <div class="settings-footer-right">
+            <button type="button" class="ws-btn" :disabled="checkingUpdates" @click="checkUpdates">
+              {{ checkingUpdates ? 'Checking...' : 'Check for Updates' }}
+            </button>
+          </div>
+        </div>
+        <div v-if="updateResult" class="settings-update-status">
+          <span v-if="updateResult.error" class="price-sub">Update check failed: {{ updateResult.error }}</span>
+          <span v-else-if="updateResult.updateAvailable" class="update-available">
+            New version v{{ updateResult.latestVersion }} available!
+            <button type="button" class="link-btn" @click="openReleaseUrl">Download</button>
+          </span>
+          <span v-else class="price-sub">You are on the latest version (v{{ updateResult.currentVersion }}).</span>
         </div>
       </section>
     </main>
