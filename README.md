@@ -18,7 +18,10 @@
 
 ## Demo
 
-https://github.com/T58574/simple-poe-check/raw/main/assets/demo.mp4
+
+https://github.com/user-attachments/assets/14540e3b-8416-484b-ac7c-49afe73b2f1c
+
+
 
 ## Screenshots
 
