@@ -16,6 +16,10 @@
 - **`POESESSID` не обязателен:** проверка цен по `Ctrl+D` работает сразу без логина и куки. `POESESSID` нужен только для сканирования вкладок тайника.
 - **Прозрачная сборка из исходников:** portable `.exe` собирается автоматически через GitHub Actions с публикацией контрольных сумм `SHA256SUMS.txt`.
 
+## Демо
+
+https://github.com/T58574/simple-poe-check/raw/main/assets/demo.mp4
+
 ## Скриншоты
 
 <p align="center">
