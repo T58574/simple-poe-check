@@ -2,6 +2,12 @@
 
 Lightweight, open-source Path of Exile overlay combining instant item price-checking with local stash valuation, farm profit tracking, and bulk listing export. Everything runs locally on your machine with no third-party backend or account servers.
 
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/5a76087e-015f-461b-a32d-f892c7664bdf" />
+<img width="1497" height="1043" alt="image" src="https://github.com/user-attachments/assets/52f1d07c-c390-4864-a69d-08fee21c03d4" />
+<img width="1475" height="750" alt="image" src="https://github.com/user-attachments/assets/ddb69f38-a780-47a8-8afe-eab81717c77f" />
+
+
+
 ## Features
 
 - **In-Game Price Checker (`Ctrl+D`)**
