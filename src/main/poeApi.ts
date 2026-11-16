@@ -16,7 +16,16 @@ import type {
   TradeSearchRequest
 } from '../shared/types'
 
-const USER_AGENT = 'SimplePoeCheck/0.2.0 (desktop overlay)'
+const getUserAgent = (): string => `SimplePoeCheck/${app.getVersion()} (desktop overlay)`
+
+function isPoeHost (rawUrl: string): boolean {
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase()
+    return host === 'pathofexile.com' || host.endsWith('.pathofexile.com')
+  } catch {
+    return false
+  }
+}
 const POE_API_BASE = 'https://www.pathofexile.com/api/trade'
 const NINJA_EXCHANGE_BASE = 'https://poe.ninja/poe1/api/economy/exchange/current/overview'
 const NINJA_STASH_ITEM_BASE = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview'
@@ -968,11 +977,11 @@ export class PoeApiClient {
     }
 
     const headers: Record<string, string> = {
-      'User-Agent': USER_AGENT,
+      'User-Agent': getUserAgent(),
       Accept: 'application/json',
       ...(init?.headers as Record<string, string> | undefined)
     }
-    if (cfg.poeSessId && url.includes('pathofexile.com')) {
+    if (cfg.poeSessId && isPoeHost(url)) {
       headers.Cookie = `POESESSID=${cfg.poeSessId.trim()}`
     }
 

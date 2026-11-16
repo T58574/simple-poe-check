@@ -49,6 +49,12 @@ function pickDefaultLeague (leagues: string[]): string | null {
 }
 
 async function main (): Promise<void> {
+  const gotLock = app.requestSingleInstanceLock()
+  if (!gotLock) {
+    app.quit()
+    return
+  }
+
   await app.whenReady()
 
   const configStore = new ConfigStore()
@@ -56,8 +62,17 @@ async function main (): Promise<void> {
   const poeApi = new PoeApiClient(() => configStore.get())
   const stashService = new StashService(configStore, poeApi)
 
+  app.on('second-instance', () => {
+    overlay.openDetachedApp()
+  })
+
   const devUrl = process.env.VITE_DEV_SERVER_URL
   overlay.create(configStore.get().gameWindowTitle, devUrl)
+
+  if (!configStore.get().firstRunShown) {
+    configStore.save({ firstRunShown: true })
+    overlay.openDetachedApp()
+  }
 
   const handlePriceCheckText = async (rawText: string): Promise<void> => {
     const item = parseItemText(rawText)
@@ -151,6 +166,10 @@ async function main (): Promise<void> {
     ])
   )
   tray.on('double-click', () => overlay.openDetachedApp())
+
+  app.on('window-all-closed', () => {
+    // Keep tray app running when detached windows close
+  })
 
   app.on('will-quit', () => {
     hotkeys.stop()

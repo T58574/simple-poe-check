@@ -182,6 +182,7 @@ export const DEFAULT_CHAT_MACROS: ChatMacro[] = [
 export interface AppConfig {
   league: string
   leagueInitialized?: boolean
+  firstRunShown?: boolean
   realm: 'pc'
   gameWindowTitle: string
   priceCheckHotkey: string
@@ -208,6 +209,7 @@ export interface AppConfig {
 export const DEFAULT_CONFIG: AppConfig = {
   league: 'Standard',
   leagueInitialized: false,
+  firstRunShown: false,
   realm: 'pc',
   gameWindowTitle: 'Path of Exile',
   priceCheckHotkey: 'Ctrl+D',
