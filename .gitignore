@@ -4,3 +4,4 @@ dist-renderer/
 release/
 .tmp-tests/
 *.log
+docs/
