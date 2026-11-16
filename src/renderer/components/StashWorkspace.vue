@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   buildBulkListings,
   computeSnapshotDiff,
@@ -62,6 +62,14 @@ const bulkCopied = ref(false)
 
 // Local settings draft
 const draft = ref<AppConfig>({ ...props.config, chatMacros: props.config.chatMacros.map((m) => ({ ...m })) })
+
+watch(
+  () => props.config,
+  (next) => {
+    draft.value = { ...next, chatMacros: next.chatMacros.map((m) => ({ ...m })) }
+  },
+  { deep: true }
+)
 
 const currentSnapshot = computed(() => {
   if (snapshots.value.length === 0) return null
@@ -363,6 +371,24 @@ function onLeagueChange (ev: Event): void {
   })
 }
 
+const busyNinja = ref(false)
+
+async function refreshNinjaPrices (): Promise<void> {
+  busyNinja.value = true
+  errorText.value = ''
+  statusText.value = 'Refreshing poe.ninja prices...'
+  try {
+    await window.poeCheck.refreshCache()
+    emit('refresh-cache')
+    statusText.value = 'poe.ninja prices updated'
+  } catch (err) {
+    errorText.value = err instanceof Error ? err.message : 'Failed to refresh cache'
+    statusText.value = ''
+  } finally {
+    busyNinja.value = false
+  }
+}
+
 function formatTime (ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
@@ -404,7 +430,9 @@ onMounted(() => {
           Sign in (PoE)
         </button>
 
-        <button class="ws-btn" @click="emit('refresh-cache')">Refresh Ninja</button>
+        <button class="ws-btn" :disabled="busyNinja" @click="refreshNinjaPrices">
+          {{ busyNinja ? 'Refreshing...' : 'Refresh Ninja' }}
+        </button>
         <button v-if="!props.detached" class="ws-btn" @click="popOut">Pop Out</button>
         <button class="ws-btn ws-btn-close" @click="emit('close')">Close</button>
       </div>
@@ -686,7 +714,14 @@ onMounted(() => {
               <tr v-for="row in farmSummary.topGains" :key="row.key">
                 <td class="item-cell">
                   <img v-if="row.icon" :src="row.icon" class="item-icon" alt="" />
-                  <span>{{ row.name }}</span>
+                  <span
+                    class="item-copy-name"
+                    title="Click to copy name"
+                    @click="copyItemName(row.name, `farm-${row.key}`)"
+                  >
+                    {{ row.name }}
+                  </span>
+                  <span v-if="copiedItemId === `farm-${row.key}`" class="ws-copied-tag">Copied</span>
                 </td>
                 <td>{{ row.category }}</td>
                 <td class="num" :class="row.deltaQty >= 0 ? 'accent-green' : 'accent-danger'">
@@ -770,7 +805,14 @@ onMounted(() => {
               <tr v-for="item in bulkItems" :key="item.key">
                 <td class="item-cell">
                   <img v-if="item.icon" :src="item.icon" class="item-icon" alt="" />
-                  <span>{{ item.name }}</span>
+                  <span
+                    class="item-copy-name"
+                    title="Click to copy name"
+                    @click="copyItemName(item.name, `bulk-${item.key}`)"
+                  >
+                    {{ item.name }}
+                  </span>
+                  <span v-if="copiedItemId === `bulk-${item.key}`" class="ws-copied-tag">Copied</span>
                 </td>
                 <td>{{ item.category }}</td>
                 <td class="num">{{ item.quantity }}</td>

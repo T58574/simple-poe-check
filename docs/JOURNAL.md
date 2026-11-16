@@ -1,6 +1,6 @@
 # Project Journal
 
-- `last_updated`: `2026-11-15T23:52:38Z`
+- `last_updated`: `2026-11-16T00:16:57Z`
 - `scope`: `simple-poe-check` (Electron + Vue 3 Path of Exile price checker, stash tracker, farm profit analyzer, and bulk listing overlay)
 - `owner`: project maintainers
 
@@ -9,7 +9,7 @@
 - **2026-11-15** | Price-check overlay opens at full viewport height (`100vh`) and positions adjacent to cursor (`28px` offset right or left based on cursor half) in `src/main/overlay.ts` and `src/renderer/App.vue` | `verified-this-turn` | `npm test` (11/11) and `npm run build` passed; live in-game positioning pending user verification.
 - **2026-11-15** | Migrated `poe.ninja` client (`src/main/poeApi.ts`, cache `ninja-v3-*.json`) to `poe1/api/economy/exchange/current/overview` and `poe1/api/economy/stash/current/item/overview` after verifying live `Covens` JSON; fixed `Divine Orb` rate (`core.rates.divine` / `divine` line) and all currency/item pricing | `verified-this-turn` | Live `curl` verified `Covens` schema; `npm test` and `npm run build` passed.
 - **2026-11-15** | Added `Beast`, `Scarab` (in `stash/current/item/overview`), `BlightedMap`, `BlightRavagedMap`, `UniqueMap`, `UniqueRelic`, `AllflameEmber`, and `Runegraft` to `poe.ninja` loader (`ninja-v4-*.json`) + `Beast` classification in `src/shared/stashValuation.ts` | `verified-this-turn` | Probed live `poe.ninja` `Covens` endpoints; `npm test` and `npm run build` passed.
-- **2026-11-15** | Fixed 4 price-checker gaps: Skill Gems skip description mod parsing (`itemParser.ts`); Eldritch/Influenced mod sections no longer dropped when influence flags share the section (`itemParser.ts`); unmatched multi-line hybrid fractured mods (`Urchin's`) split into individual trade stats (`poeApi.ts`, `itemParser.ts`); added Sockets/Links/R-G-B-W color filters (`types.ts`, `itemParser.ts`, `poeApi.ts`, `App.vue`) | `verified-this-turn` | `npm test` (13/13) and `npm run build` passed.
+- **2026-11-16** | Release polish: added `README.md` and MIT `LICENSE`, Tray `Open Stash Window` action (`src/main/index.ts`), `Stash` quick-switch in price-check topbar (`src/renderer/App.vue`), click-to-copy across Farm/Bulk tables + Ninja refresh status + config sync (`src/renderer/components/StashWorkspace.vue`) | `verified-this-turn` | `npm test` (13/13) and `npm run build` passed.
 - **2026-11-15** | Snapshots, farm-session `chaos/hr` & `div/hr` diffs, and bulk aggregation are implemented in `src/shared/stashValuation.ts` and persisted locally in `userData/stash-snapshots.json` (max 100) | `verified-earlier` | Unit-tested in `tests/stashValuation.test.ts`.
 - **2026-11-15** | Fixed `An object could not be cloned.` on `Take Snapshot` / `Save Config` by unwrapping Vue 3 reactive Proxies in the renderer (`src/renderer/components/StashWorkspace.vue`, `src/renderer/App.vue`) before crossing Electron `contextBridge` (which clones arguments before `preload.ts` runs) | `verified-this-turn` | `npm test` (11/11) and `npm run build` passed.
 

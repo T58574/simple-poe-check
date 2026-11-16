@@ -138,7 +138,8 @@ async function main (): Promise<void> {
   tray.setToolTip('Simple PoE Check')
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Settings / Overlay', click: () => overlay.showStandalone() },
+      { label: 'Open Stash Window', click: () => overlay.openDetachedApp() },
+      { label: 'Open Overlay Settings', click: () => overlay.showStandalone() },
       {
         label: 'Refresh League Cache',
         click: () => {
@@ -149,7 +150,7 @@ async function main (): Promise<void> {
       { label: 'Quit', click: () => app.quit() }
     ])
   )
-  tray.on('double-click', () => overlay.showStandalone())
+  tray.on('double-click', () => overlay.openDetachedApp())
 
   app.on('will-quit', () => {
     hotkeys.stop()
