@@ -198,6 +198,26 @@ class PolicyRateLimiter {
     }
     return tightest
   }
+
+  markBlocked (policyKey: string, retryAfterSec: number): void {
+    const until = Date.now() + Math.max(1, retryAfterSec) * 1000
+    const rules = this.policies.get(policyKey)
+    if (!rules || rules.length === 0) {
+      this.policies.set(policyKey, [{
+        max: 1,
+        windowSec: retryAfterSec,
+        penaltySec: retryAfterSec,
+        timestamps: [Date.now()],
+        blockedUntil: until
+      }])
+      return
+    }
+    for (const r of rules) {
+      if (until > r.blockedUntil) {
+        r.blockedUntil = until
+      }
+    }
+  }
 }
 
 export class PoeApiClient {
@@ -476,6 +496,10 @@ export class PoeApiClient {
     return this.divineChaosRate
   }
 
+  getPolicyStatus (policyKey: string): RateLimitStatus | undefined {
+    return this.rateLimiter.getStatus(policyKey)
+  }
+
   async fetchPoeApi<T> (url: string, policyKey = 'stash-api'): Promise<T> {
     return this.fetchJson<T>(url, undefined, false, policyKey)
   }
@@ -576,7 +600,12 @@ export class PoeApiClient {
       return this.ninjaCache.get(`map::${baseKey}::t${item.mapTier}`)
     }
 
-    if (item.rarity === 'Currency' || item.rarity === 'Divination Card') {
+    if (item.rarity === 'Rare') {
+      const beastHit = this.ninjaCache.get(`beast::${nameKey}`) ?? this.ninjaCache.get(`beast::${baseKey}`)
+      if (beastHit) return beastHit
+    }
+
+    if (item.rarity === 'Currency' || item.rarity === 'Divination Card' || item.rarity === 'Normal') {
       return this.ninjaCache.get(nameKey) ?? this.ninjaCache.get(baseKey)
     }
 
@@ -727,7 +756,7 @@ export class PoeApiClient {
       req.item.rarity === 'Gem'
     ) {
       query.type = req.item.baseType
-    } else if (!isGenericTieredMap && (req.useBaseType || !req.item.tradeCategory) && req.item.rarity !== 'Magic') {
+    } else if (!isGenericTieredMap && (req.useBaseType || (!req.item.tradeCategory && req.item.rarity !== 'Magic'))) {
       query.type = req.item.baseType
     }
 
@@ -996,12 +1025,15 @@ export class PoeApiClient {
     }
 
     if (res.status === 429) {
-      const retryAfter = Number.parseInt(res.headers.get('retry-after') ?? '0', 10) || 2
+      const retryAfter = Number.parseInt(res.headers.get('retry-after') ?? '0', 10) || 10
+      if (policyKey) {
+        this.rateLimiter.markBlocked(policyKey, retryAfter)
+      }
       if (!retried && retryAfter <= 5) {
         await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000))
         return this.fetchJson<T>(url, init, true, explicitPolicyKey)
       }
-      throw new Error(`Rate limited by PoE Trade API (retry in ${retryAfter}s)`)
+      throw new Error(`Rate limited by PoE API (retry in ${retryAfter}s)`)
     }
     if (!res.ok) {
       const body = await res.text().catch(() => '')

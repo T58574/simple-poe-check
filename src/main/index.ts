@@ -109,6 +109,11 @@ async function main (): Promise<void> {
   ipcMain.handle(IPC_CHANNELS.GET_CONFIG, () => configStore.get())
   ipcMain.handle(IPC_CHANNELS.SAVE_CONFIG, (_e, partial: Partial<AppConfig>) => configStore.save(partial))
   ipcMain.handle(IPC_CHANNELS.GET_LEAGUES, () => poeApi.getLeagues())
+  ipcMain.handle(IPC_CHANNELS.RATE_LIMIT_STATUS, () => ({
+    trade: poeApi.getPolicyStatus('trade-search'),
+    stash: poeApi.getPolicyStatus('stash-api'),
+    stashCooldownUntil: stashService.getStashCooldownUntil()
+  }))
   ipcMain.handle(IPC_CHANNELS.REFRESH_CACHE, async () => {
     poeApi.clearSearchCache()
     await Promise.all([

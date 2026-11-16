@@ -4,6 +4,7 @@ import {
   type AppConfig,
   type OverlayStatePayload,
   type PriceCheckResult,
+  type RateLimitOverview,
   type StashAuthStatus,
   type StashSnapshot,
   type StashTabInfo,
@@ -21,6 +22,7 @@ export interface PoeCheckApi {
   saveConfig: (partial: Partial<AppConfig>) => Promise<AppConfig>
   getLeagues: () => Promise<string[]>
   refreshCache: () => Promise<void>
+  getRateLimitStatus: () => Promise<RateLimitOverview>
   stashAuthLogin: (poeSessId: string, accountName?: string) => Promise<StashAuthStatus>
   stashAuthLogout: () => Promise<StashAuthStatus>
   stashAuthStatus: () => Promise<StashAuthStatus>
@@ -54,6 +56,7 @@ const api: PoeCheckApi = {
   saveConfig: (partial) => ipcRenderer.invoke(IPC_CHANNELS.SAVE_CONFIG, JSON.parse(JSON.stringify(partial))),
   getLeagues: () => ipcRenderer.invoke(IPC_CHANNELS.GET_LEAGUES),
   refreshCache: () => ipcRenderer.invoke(IPC_CHANNELS.REFRESH_CACHE),
+  getRateLimitStatus: () => ipcRenderer.invoke(IPC_CHANNELS.RATE_LIMIT_STATUS),
   stashAuthLogin: (poeSessId, accountName) =>
     ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_LOGIN, { poeSessId, accountName }),
   stashAuthLogout: () => ipcRenderer.invoke(IPC_CHANNELS.STASH_AUTH_LOGOUT),

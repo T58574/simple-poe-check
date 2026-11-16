@@ -25,6 +25,8 @@ const config = ref<AppConfig>({ ...DEFAULT_CONFIG })
 const leagues = ref<string[]>(['Standard', 'Hardcore'])
 const statusMessage = ref('')
 const copiedIdx = ref<number | null>(null)
+const modsCollapsed = ref(false)
+const showUnmatchedMods = ref(false)
 
 // Filter state for current item
 const tradeStatus = ref<TradeStatusOption>('available')
@@ -61,6 +63,66 @@ let unsubOverlay: (() => void) | null = null
 const rarityClass = computed(() =>
   result.value ? `rarity-${result.value.item.rarity}` : ''
 )
+
+const matchedStatsCount = computed(() =>
+  result.value ? result.value.matchedMods.filter((m) => Boolean(m.statId)).length : 0
+)
+
+const unmatchedModsCount = computed(() =>
+  result.value ? result.value.matchedMods.filter((m) => !m.statId).length : 0
+)
+
+const selectedStatsCount = computed(() => {
+  let count = enabledMods.value.size
+  if (weaponEnabled.dps) count++
+  if (weaponEnabled.pdps) count++
+  if (weaponEnabled.aps) count++
+  if (weaponEnabled.crit) count++
+  if (armourEnabled.ar) count++
+  if (armourEnabled.ev) count++
+  if (armourEnabled.es) count++
+  return count
+})
+
+const errorHint = computed(() => {
+  const err = result.value?.error ?? ''
+  if (!err) return null
+  if (/403|cloudflare/i.test(err)) {
+    return {
+      text: 'Trade API blocked by Cloudflare. Add your POESESSID in Settings or click Open Trade to solve the check in your browser.',
+      showSettingsBtn: true
+    }
+  }
+  if (/429|rate limit/i.test(err)) {
+    return {
+      text: 'PoE Trade API rate limit reached. Wait a few seconds before searching again.',
+      showSettingsBtn: false
+    }
+  }
+  if (/timeout|abort|network|fetch/i.test(err)) {
+    return {
+      text: 'Network timeout or PoE servers are slow. Try Search again or increase Request Timeout in Settings.',
+      showSettingsBtn: true
+    }
+  }
+  return null
+})
+
+function setModRolledMax (idx: number, values: number[]): void {
+  if (values.length === 0) return
+  const rolled = values.length >= 2 && values[0] >= 0 && values[1] >= 0
+    ? Number(((values[0] + values[1]) / 2).toFixed(1))
+    : values[0]
+  if (modMins[idx] === rolled) {
+    delete modMins[idx]
+  } else {
+    modMins[idx] = rolled
+    if (!enabledMods.value.has(idx)) {
+      enabledMods.value.add(idx)
+    }
+  }
+  scheduleAutoSearch()
+}
 
 const cardStyle = computed(() => {
   if (overlayMode.value === 'settings' || showSettings.value) {
@@ -387,8 +449,21 @@ onUnmounted(() => {
       <header class="topbar">
         <div class="topbar-left">
           <span class="league-title">{{ showSettings ? 'Settings' : config.league }}</span>
-          <span v-if="!showSettings && result?.rateLimit" class="rate-pill">
-            API {{ result.rateLimit.remaining }}/{{ result.rateLimit.max }}
+          <span
+            v-if="!showSettings && result?.rateLimit"
+            class="rate-pill"
+            :class="{
+              'rate-blocked': result.rateLimit.blockedUntil > Date.now(),
+              'rate-warn': result.rateLimit.remaining <= 2
+            }"
+            :title="`PoE Trade API limit: ${result.rateLimit.remaining}/${result.rateLimit.max} per ${result.rateLimit.windowSec}s`"
+          >
+            <template v-if="result.rateLimit.blockedUntil > Date.now()">
+              Blocked {{ Math.ceil((result.rateLimit.blockedUntil - Date.now()) / 1000) }}s
+            </template>
+            <template v-else>
+              API {{ result.rateLimit.remaining }}/{{ result.rateLimit.max }}
+            </template>
           </span>
         </div>
         <div class="actions">
@@ -415,7 +490,10 @@ onUnmounted(() => {
 
         <div class="pill-row">
           <span v-if="result.item.itemClass" class="pill static">{{ result.item.itemClass }}</span>
-          <label v-if="result.item.tradeCategory && result.item.rarity !== 'Unique' && result.item.rarity !== 'Magic'" class="pill" :class="{ active: useBaseType }">
+          <span v-if="matchedStatsCount > 0" class="pill static">
+            {{ selectedStatsCount }} of {{ matchedStatsCount }} stats
+          </span>
+          <label v-if="result.item.tradeCategory && result.item.rarity !== 'Unique'" class="pill" :class="{ active: useBaseType }">
             <input v-model="useBaseType" type="checkbox" hidden @change="scheduleAutoSearch" />
             Base
           </label>
@@ -538,7 +616,15 @@ onUnmounted(() => {
 
         <template v-else-if="result">
           <div class="mods-scroll">
-            <div v-if="result.error" class="error-box">{{ result.error }}</div>
+            <div v-if="result.error" class="error-box">
+              <div>{{ result.error }}</div>
+              <div v-if="errorHint" class="error-hint">
+                <span>{{ errorHint.text }}</span>
+                <button v-if="errorHint.showSettingsBtn" class="mini-btn" @click="openSettings(true)">
+                  Open Settings
+                </button>
+              </div>
+            </div>
             <div v-if="result.ninjaVariantNote" class="warn-box">{{ result.ninjaVariantNote }}</div>
 
             <div v-if="result.source === 'ninja' && result.chaosValue !== undefined" class="price-banner">
@@ -690,9 +776,10 @@ onUnmounted(() => {
             </div>
 
             <!-- Modifiers -->
-            <div v-if="result.matchedMods.length > 0" class="mod-list">
+            <div v-if="result.matchedMods.length > 0 && !modsCollapsed" class="mod-list">
               <div
                 v-for="(mod, idx) in result.matchedMods"
+                v-show="mod.statId || showUnmatchedMods || matchedStatsCount === 0"
                 :key="idx"
                 class="mod-row"
                 :class="{
@@ -711,14 +798,14 @@ onUnmounted(() => {
                     <span class="mod-text">{{ mod.modifier.display }}</span>
                     <div class="badge-row">
                       <span class="badge" :class="`kind-${mod.modifier.kind}`">
-                        {{ mod.modifier.kind }}
+                        {{ mod.modifier.kind.toUpperCase() }}
                       </span>
                       <span
                         v-if="mod.modifier.tier"
                         class="badge"
                         :class="{ 'tier-top': mod.modifier.tier <= 2 }"
                       >
-                        T{{ mod.modifier.tier }}
+                        Tier {{ mod.modifier.tier }}
                       </span>
                     </div>
                   </div>
@@ -727,11 +814,34 @@ onUnmounted(() => {
                   <input
                     v-model.number="modMins[idx]"
                     type="number"
+                    placeholder="min"
                     class="num-input"
                     @change="scheduleAutoSearch"
                   />
+                  <button
+                    type="button"
+                    class="max-btn"
+                    title="Set min to item's rolled value (click again to clear)"
+                    @click="setModRolledMax(idx, mod.modifier.values)"
+                  >
+                    MAX
+                  </button>
                 </div>
               </div>
+            </div>
+
+            <div v-if="result.matchedMods.length > 0" class="mods-footer-bar">
+              <button type="button" class="mini-btn" @click="modsCollapsed = !modsCollapsed">
+                {{ modsCollapsed ? `Expand Mods (${result.matchedMods.length})` : 'Collapse Mods' }}
+              </button>
+              <button
+                v-if="unmatchedModsCount > 0 && matchedStatsCount > 0"
+                type="button"
+                class="mini-btn"
+                @click="showUnmatchedMods = !showUnmatchedMods"
+              >
+                {{ showUnmatchedMods ? 'Hide Unmatched' : `Unmatched (${unmatchedModsCount})` }}
+              </button>
             </div>
           </div>
 
@@ -771,14 +881,18 @@ onUnmounted(() => {
               </div>
             </div>
             <div v-else-if="result.source === 'trade' && !result.error" class="empty-state">
-              No matching listings found.
+              No matching listings found. Try unchecking iLvl, Base, or lowering min mod values.
             </div>
           </div>
         </template>
 
-        <div v-else class="empty-state">
-          Hover an item in Path of Exile and press <b>{{ config.priceCheckHotkey }}</b>.<br />
-          Press <b>{{ config.hideoutHotkey }}</b> for /hideout.
+        <div v-else class="empty-guide">
+          <div class="guide-title">Quick Start — Price Check</div>
+          <ol class="guide-steps">
+            <li>Set Path of Exile to <b>English</b> and <b>Windowed Fullscreen</b>.</li>
+            <li>Hover any item in game and press <b>{{ config.priceCheckHotkey }}</b> (hold <b>Alt</b> or use <code>Ctrl+Alt+C</code> for mod tiers).</li>
+            <li>Press <b>{{ config.toggleAppHotkey }}</b> for Stash &amp; Farm Tracker, or <b>{{ config.hideoutHotkey }}</b> for <code>/hideout</code>.</li>
+          </ol>
         </div>
       </main>
     </div>

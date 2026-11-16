@@ -13,6 +13,8 @@ import type { ConfigStore } from './config'
 import type { PoeApiClient } from './poeApi'
 
 const MAX_STORED_SNAPSHOTS = 100
+const SNAPSHOT_COOLDOWN_MS = 15_000
+const TAB_FETCH_PACING_MS = 250
 
 interface CharacterWindowStashResponse {
   numTabs?: number
@@ -30,6 +32,7 @@ interface CharacterWindowStashResponse {
 export class StashService {
   private readonly snapshotsPath: string
   private snapshots: StashSnapshot[] = []
+  private lastSnapshotAt = 0
 
   constructor (
     private readonly configStore: ConfigStore,
@@ -104,12 +107,31 @@ export class StashService {
     return mapTabs(data)
   }
 
+  getStashCooldownUntil (): number {
+    const until = this.lastSnapshotAt + SNAPSHOT_COOLDOWN_MS
+    return until > Date.now() ? until : 0
+  }
+
   async takeSnapshot (requestedTabIds?: string[]): Promise<StashSnapshot> {
     const cfg = this.configStore.get()
     if (!cfg.poeSessId.trim()) {
       throw new Error('Not signed in. Click "Sign in" or paste POESESSID in Settings.')
     }
 
+    const now = Date.now()
+    const cooldownUntil = this.getStashCooldownUntil()
+    if (cooldownUntil > now) {
+      const waitSec = Math.ceil((cooldownUntil - now) / 1000)
+      throw new Error(`Stash scan cooldown active (${waitSec}s remaining) to avoid PoE API rate limits.`)
+    }
+
+    const stashPolicy = this.poeApi.getPolicyStatus('stash-api')
+    if (stashPolicy?.blockedUntil && stashPolicy.blockedUntil > now) {
+      const waitSec = Math.ceil((stashPolicy.blockedUntil - now) / 1000)
+      throw new Error(`PoE Stash API rate limit active (${waitSec}s remaining).`)
+    }
+
+    this.lastSnapshotAt = now
     await this.poeApi.ensureNinjaLoaded()
     const accountName = cfg.accountName.trim() || (await this.resolveAccountName())
 
@@ -132,7 +154,11 @@ export class StashService {
     const tabSummaries: StashSnapshot['tabs'] = []
     const divineRate = this.poeApi.getDivineChaosRate()
 
-    for (const tab of tabsToScan) {
+    for (let i = 0; i < tabsToScan.length; i++) {
+      const tab = tabsToScan[i]
+      if (tab.index !== 0 && i > 0) {
+        await new Promise((resolve) => setTimeout(resolve, TAB_FETCH_PACING_MS))
+      }
       const tabData = tab.index === 0
         ? firstTabData
         : await this.fetchTabResponse(cfg.league, cfg.realm, accountName, tab.index, false)

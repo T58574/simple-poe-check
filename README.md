@@ -52,6 +52,7 @@ Before running **Simple PoE Check**, make sure your game is configured as follow
 
 - **Stash & Farm Tracker (`Ctrl+Space` or Pop-Out Window)**
   - **Net Worth & Tab Breakdown:** scans only the stash tabs you select and prices them locally against `poe.ninja` in Chaos and Divine Orbs.
+  - **Rate-Limit Protection:** PoE's Stash API enforces strict rate limits; the app paces tab requests, enforces a 15-second cooldown between snapshots, and shows your live API quota (`Stash API X/Y`) so you don't get temporarily blocked. Avoid refreshing too frequently and select only the tabs you need.
   - **Table Filtering & Sorting:** filter by item name, category, stash tab, or minimum chaos value (`minItemChaos`), sort by any column, and click any item name to copy it.
   - **Farm Session Tracker:** take snapshots before and after mapping to measure net profit, `chaos/hr`, `divine/hr`, and top gained/lost items.
   - **Bulk Selling:** aggregates stackable/liquid items across selected tabs with configurable minimum value and price multiplier (`85%`–`110%`), ready to copy for trade.

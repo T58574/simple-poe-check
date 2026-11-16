@@ -106,6 +106,12 @@ export interface RateLimitStatus {
   blockedUntil: number
 }
 
+export interface RateLimitOverview {
+  trade?: RateLimitStatus
+  stash?: RateLimitStatus
+  stashCooldownUntil?: number
+}
+
 export interface PriceCheckResult {
   source: 'ninja' | 'trade'
   item: ParsedItem
@@ -328,6 +334,7 @@ export const IPC_CHANNELS = {
   SAVE_CONFIG: 'config:save',
   GET_LEAGUES: 'leagues:get',
   REFRESH_CACHE: 'cache:refresh',
+  RATE_LIMIT_STATUS: 'rate-limit:status',
   STASH_AUTH_LOGIN: 'stash:auth-login',
   STASH_AUTH_LOGOUT: 'stash:auth-logout',
   STASH_AUTH_STATUS: 'stash:auth-status',

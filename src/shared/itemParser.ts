@@ -120,10 +120,33 @@ const NON_MOD_PREFIXES = [
   'Area Level:',
   'Note:',
   'Place into',
+  'Take this to ',
   'Right click',
+  'Right-click ',
   'Shift click',
-  'Cannot use this item'
+  'Shift-click ',
+  'Left-click ',
+  'Cannot use this item',
+  'Corpse Level:',
+  'Monster Level:',
+  'Monster Category:',
+  'Monster Genus:',
+  'Heist Target:',
+  'Talisman Tier:',
+  'Area:'
 ]
+
+const VISCERA_SLOTS = new Set([
+  'Upper Limb',
+  'Lower Limb',
+  'Torso',
+  'Head',
+  'Brain',
+  'Eye',
+  'Heart',
+  'Liver',
+  'Lung'
+])
 
 export function stripInlineRanges (raw: string): string {
   return raw.replace(INLINE_RANGE_RE, '$1')
@@ -250,7 +273,7 @@ function calcQ20Multiplier (
 
 export function parseItemText (rawText: string): ParsedItem | null {
   const trimmed = rawText.trim()
-  if (!trimmed.includes('Rarity:')) {
+  if (!trimmed.includes('Rarity:') && !trimmed.includes('Item Class:')) {
     return null
   }
 
@@ -260,17 +283,23 @@ export function parseItemText (rawText: string): ParsedItem | null {
   const headerLines = sections[0].split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   let itemClass = ''
   let rarity: ItemRarity = 'Unknown'
+  let sawRarity = false
   const titleLines: string[] = []
 
   for (const line of headerLines) {
     if (line.startsWith('Item Class:')) {
       itemClass = line.slice('Item Class:'.length).trim()
     } else if (line.startsWith('Rarity:')) {
+      sawRarity = true
       const r = line.slice('Rarity:'.length).trim().toLowerCase()
       rarity = RARITY_MAP[r] ?? 'Unknown'
     } else {
       titleLines.push(line)
     }
+  }
+
+  if (!sawRarity && itemClass) {
+    rarity = 'Normal'
   }
 
   if (titleLines.length === 0) return null
@@ -393,6 +422,10 @@ export function parseItemText (rawText: string): ParsedItem | null {
     if (sectionHasKnownHeader && !hasMetaLines) continue
 
     if (rarity === 'Gem') continue
+
+    if (itemClass === 'Viscera' && lines.length === 1 && VISCERA_SLOTS.has(lines[0])) {
+      continue
+    }
 
     if (lines.some((l) => l.startsWith('Requirements:') || l.startsWith('Note:') || l.startsWith('Place into'))) {
       continue

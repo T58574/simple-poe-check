@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   buildBulkListings,
   computeSnapshotDiff,
@@ -8,6 +8,7 @@ import {
 import type {
   AppConfig,
   ChatMacro,
+  RateLimitOverview,
   StashAuthStatus,
   StashSnapshot,
   StashTabInfo,
@@ -45,6 +46,51 @@ const busyTabs = ref(false)
 const busySnap = ref(false)
 const statusText = ref('')
 const errorText = ref('')
+const rateLimits = ref<RateLimitOverview>({})
+const nowMs = ref(Date.now())
+let rateTicker: ReturnType<typeof setInterval> | null = null
+
+const stashBlockedSec = computed(() => {
+  const until = rateLimits.value.stash?.blockedUntil ?? 0
+  return until > nowMs.value ? Math.ceil((until - nowMs.value) / 1000) : 0
+})
+
+const stashCooldownSec = computed(() => {
+  const until = rateLimits.value.stashCooldownUntil ?? 0
+  return until > nowMs.value ? Math.ceil((until - nowMs.value) / 1000) : 0
+})
+
+const stashWaitSec = computed(() => Math.max(stashBlockedSec.value, stashCooldownSec.value))
+
+const stashRateClass = computed(() => {
+  if (stashBlockedSec.value > 0) return 'rate-blocked'
+  const st = rateLimits.value.stash
+  if (st && st.remaining <= 3) return 'rate-warn'
+  return ''
+})
+
+async function refreshRateLimits (): Promise<void> {
+  try {
+    rateLimits.value = await window.poeCheck.getRateLimitStatus()
+    nowMs.value = Date.now()
+  } catch {
+    // Ignore rate status poll errors
+  }
+}
+const stashErrorHint = computed(() => {
+  const err = errorText.value
+  if (!err) return ''
+  if (/401|403|forbidden|unauthorized|poesessid|profile/i.test(err)) {
+    return 'Check that your POESESSID is fresh and Account Name matches your PoE profile (e.g. Name#1234 or exact account name).'
+  }
+  if (/429|rate limit/i.test(err)) {
+    return 'PoE Stash API rate limit reached. Wait 10–30 seconds and try again, or scan fewer tabs at once.'
+  }
+  if (/no stash tabs/i.test(err)) {
+    return 'Make sure the selected League matches your character and your Account Name is correct.'
+  }
+  return ''
+})
 
 // Stash filters & sorting
 type SortKey = 'name' | 'tabName' | 'stackSize' | 'unitChaos' | 'totalChaos'
@@ -253,6 +299,7 @@ async function loadTabs (silent = false): Promise<void> {
     }
   } finally {
     busyTabs.value = false
+    void refreshRateLimits()
   }
 }
 
@@ -287,6 +334,7 @@ async function takeSnapshot (): Promise<void> {
     statusText.value = ''
   } finally {
     busySnap.value = false
+    void refreshRateLimits()
   }
 }
 
@@ -402,6 +450,19 @@ function tabColorStyle (tab: StashTabInfo): Record<string, string> {
 
 onMounted(() => {
   void loadInitial()
+  void refreshRateLimits()
+  rateTicker = setInterval(() => {
+    if (stashWaitSec.value > 0 || (rateLimits.value.stash?.blockedUntil ?? 0) > nowMs.value) {
+      nowMs.value = Date.now()
+    }
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (rateTicker) {
+    clearInterval(rateTicker)
+    rateTicker = null
+  }
 })
 </script>
 
@@ -471,7 +532,10 @@ onMounted(() => {
     </nav>
 
     <!-- Status / Error banner -->
-    <div v-if="errorText" class="ws-banner ws-banner-error">{{ errorText }}</div>
+    <div v-if="errorText" class="ws-banner ws-banner-error">
+      <div>{{ errorText }}</div>
+      <div v-if="stashErrorHint" class="ws-banner-hint">{{ stashErrorHint }}</div>
+    </div>
     <div v-else-if="statusText" class="ws-banner ws-banner-info">{{ statusText }}</div>
 
     <!-- Browser POESESSID Paste Bar -->
@@ -539,17 +603,37 @@ onMounted(() => {
           </div>
 
           <div class="ws-actions">
-            <button class="ws-btn" :disabled="busyTabs || !auth.authenticated" @click="loadTabs(false)">
+            <span
+              v-if="rateLimits.stash || stashWaitSec > 0"
+              class="rate-pill"
+              :class="stashRateClass"
+              title="PoE Stash API has strict rate limits. Avoid frequent refreshes and select only needed tabs."
+            >
+              <template v-if="stashBlockedSec > 0">Rate limited: {{ stashBlockedSec }}s</template>
+              <template v-else-if="rateLimits.stash">
+                Stash API {{ rateLimits.stash.remaining }}/{{ rateLimits.stash.max }} ({{ rateLimits.stash.windowSec }}s)
+              </template>
+            </span>
+            <button class="ws-btn" :disabled="busyTabs || !auth.authenticated || stashBlockedSec > 0" @click="loadTabs(false)">
               {{ busyTabs ? 'Loading...' : 'Sync Tabs' }}
             </button>
             <button
               class="ws-btn ws-btn-accent"
-              :disabled="busySnap || !auth.authenticated"
+              :disabled="busySnap || !auth.authenticated || stashWaitSec > 0"
               @click="takeSnapshot()"
             >
-              {{ busySnap ? 'Scanning...' : 'Take Snapshot' }}
+              {{
+                busySnap
+                  ? 'Scanning...'
+                  : stashWaitSec > 0
+                    ? `Cooldown (${stashWaitSec}s)`
+                    : 'Take Snapshot'
+              }}
             </button>
           </div>
+        </div>
+        <div v-if="auth.authenticated" class="ws-rate-note">
+          PoE Stash API has strict rate limits — avoid frequent refreshes and select only the tabs you need.
         </div>
 
         <!-- Tab Selector -->
@@ -568,8 +652,19 @@ onMounted(() => {
             </button>
           </div>
         </div>
-        <div v-else-if="!auth.authenticated" class="ws-empty">
-          Sign in with your Path of Exile account (or paste POESESSID in Settings) to load your stash tabs.
+        <div v-else-if="!auth.authenticated || !currentSnapshot" class="empty-guide">
+          <div class="guide-title">How to Use Stash &amp; Farm Tracker</div>
+          <ol class="guide-steps">
+            <li>
+              <b>Connect your account:</b> click <b>Sign in (PoE)</b> (or open <b>Settings</b>), enter your <b>Account Name</b> and paste <code>POESESSID</code> from browser DevTools (<code>F12</code> &gt; Application &gt; Cookies).
+            </li>
+            <li>
+              <b>Load your tabs:</b> click <b>Sync Tabs</b> and select which stash tabs to include.
+            </li>
+            <li>
+              <b>Price your stash:</b> click <b>Take Snapshot</b>. To track profit/hr, take a snapshot before and after running maps in <b>Farm Tracker</b>.
+            </li>
+          </ol>
         </div>
 
         <!-- Item Filter Bar -->
@@ -666,10 +761,16 @@ onMounted(() => {
             </button>
             <button
               class="ws-btn ws-btn-accent"
-              :disabled="busySnap || !auth.authenticated"
+              :disabled="busySnap || !auth.authenticated || stashWaitSec > 0"
               @click="takeSnapshot()"
             >
-              {{ busySnap ? 'Scanning...' : 'Update Now' }}
+              {{
+                busySnap
+                  ? 'Scanning...'
+                  : stashWaitSec > 0
+                    ? `Cooldown (${stashWaitSec}s)`
+                    : 'Update Now'
+              }}
             </button>
           </div>
         </div>

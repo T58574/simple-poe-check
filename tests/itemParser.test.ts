@@ -347,3 +347,31 @@ test('parses Skill Gem without bogus description mods, Eldritch influenced glove
   assert.equal(gloves.influences?.length, 2)
   assert.equal(gloves.modifiers.length, 5)
 })
+
+test('parses Viscera (Wickerman) item without Rarity line and ignores slot/instruction text', () => {
+  const visceraText = [
+    'Item Class: Viscera',
+    "Lesser Ancestor's Club",
+    '--------',
+    'Upper Limb',
+    '--------',
+    'Item Level: 46',
+    '--------',
+    '{ Implicit Modifier }',
+    'Strike Skills which target additional Enemies can do so from 12(10-15)% further away',
+    '--------',
+    'Take this to the Wickerman in a town or hideout to attach it.'
+  ].join('\n')
+
+  const item = parseItemText(visceraText)
+  assert.ok(item)
+  assert.equal(item.itemClass, 'Viscera')
+  assert.equal(item.rarity, 'Normal')
+  assert.equal(item.name, "Lesser Ancestor's Club")
+  assert.equal(item.baseType, "Lesser Ancestor's Club")
+  assert.equal(item.ilvl, 46)
+  assert.equal(item.modifiers.length, 1)
+  assert.equal(item.modifiers[0].kind, 'implicit')
+  assert.deepEqual(item.modifiers[0].values, [12])
+  assert.equal(item.modifiers[0].template, 'Strike Skills which target additional Enemies can do so from #% further away')
+})
