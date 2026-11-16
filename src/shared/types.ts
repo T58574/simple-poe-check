@@ -229,7 +229,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   selectedStashTabIds: [],
   minItemChaos: 1,
   bulkMinChaos: 10,
-  autoSearchOnFilterChange: true,
+  autoSearchOnFilterChange: false,
   restoreClipboard: true,
   ninjaCacheTtlMinutes: 60,
   statsCacheTtlHours: 24,

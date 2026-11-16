@@ -1,13 +1,13 @@
 {
   "name": "simple-poe-check",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "license": "MIT",
   "author": {
     "name": "T58574",
     "url": "https://github.com/T58574"
   },
-  "description": "Lightweight Path of Exile price checker and hideout hotkey overlay",
+  "description": "Local Path of Exile 1 overlay for instant price checking, stash net worth, farm tracking, bulk export, and chat macros",
   "repository": {
     "type": "git",
     "url": "https://github.com/T58574/simple-poe-check.git"

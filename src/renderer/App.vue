@@ -55,6 +55,7 @@ const socketFilter = reactive<{
   w?: number
 }>({ enabled: false })
 
+const filtersDirty = ref(false)
 let autoSearchTimer: ReturnType<typeof setTimeout> | null = null
 let unsubResult: (() => void) | null = null
 let unsubLoading: (() => void) | null = null
@@ -188,14 +189,17 @@ function syncFiltersFromResult (res: PriceCheckResult): void {
     }
   })
   enabledMods.value = nextMods
+  filtersDirty.value = false
 }
 
 function scheduleAutoSearch (): void {
-  if (!config.value.autoSearchOnFilterChange || !result.value) return
+  if (!result.value) return
+  filtersDirty.value = true
+  if (!config.value.autoSearchOnFilterChange) return
   if (autoSearchTimer) clearTimeout(autoSearchTimer)
   autoSearchTimer = setTimeout(() => {
     void runSearch()
-  }, 350)
+  }, 1200)
 }
 
 function toggleMod (idx: number, statId: string | null): void {
@@ -216,6 +220,7 @@ async function runSearch (): Promise<void> {
     autoSearchTimer = null
   }
   if (!result.value) return
+  filtersDirty.value = false
   loading.value = true
   try {
     const filters = result.value.matchedMods
@@ -848,7 +853,7 @@ onUnmounted(() => {
           <!-- Search & Trade link (pinned) -->
           <div v-if="result.source === 'trade' || result.matchedMods.length > 0" class="search-bar">
             <button class="primary" :disabled="loading" @click="runSearch">
-              {{ loading ? 'Searching...' : 'Search' }}
+              {{ loading ? 'Searching...' : filtersDirty ? 'Search (Apply Filters)' : 'Search' }}
             </button>
             <button v-if="result.tradeUrl" @click="openTradeInBrowser">
               Open Trade ({{ result.totalResults ?? 0 }})

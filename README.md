@@ -7,7 +7,14 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: Windows x64](https://img.shields.io/badge/platform-Windows%20x64-0078D6)
 
-Lightweight, open-source Path of Exile overlay combining instant item price-checking with local stash valuation, farm profit tracking, and bulk listing export. Everything runs locally on your machine with no third-party backend or account servers.
+**All-in-one, 100% local open-source overlay for Path of Exile 1.** Combines instant `Ctrl+D` item price-checking, local stash net worth valuation, farm profit tracking (`chaos/hr`, `divine/hr`), bulk selling export, and chat macros in a single portable `.exe` — no Overwolf, no third-party servers, no account sync.
+
+## Why Simple PoE Check?
+
+- **One lightweight tool instead of three:** In-game price check + stash/farm tracker + bulk export + `/hideout` macros without keeping browser tabs open.
+- **Zero third-party backend:** All requests go directly from your PC to `pathofexile.com` and `poe.ninja`. No telemetry, no external databases.
+- **`POESESSID` is optional:** `Ctrl+D` price checking works out of the box without any login or cookie. `POESESSID` is only needed if you want to scan your stash tabs.
+- **Verifiable open-source builds:** The portable `.exe` is built directly from this repository via GitHub Actions with published `SHA256SUMS.txt` checksums.
 
 ## Screenshots
 
