@@ -16,6 +16,16 @@
 - **`POESESSID` is optional:** `Ctrl+D` price checking works out of the box without any login or cookie. `POESESSID` is only needed if you want to scan your stash tabs.
 - **Verifiable open-source builds:** The portable `.exe` is built directly from this repository via GitHub Actions with published `SHA256SUMS.txt` checksums.
 
+## Preview
+
+https://github.com/user-attachments/assets/59eddbad-fc72-4fbe-9c46-ad79e7fed458
+
+
+
+
+
+
+
 ## Screenshots
 
 <p align="center">
