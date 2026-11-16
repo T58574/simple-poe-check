@@ -252,11 +252,15 @@ function isModLine (line: string): boolean {
   return !NON_MOD_PREFIXES.some((prefix) => line.startsWith(prefix))
 }
 
-function cleanBaseType (rawBase: string, rarity: ItemRarity): string {
+function cleanBaseType (rawBase: string, rarity: ItemRarity, itemClass = ''): string {
+  let cleaned = rawBase
   if (rarity === 'Normal' || rarity === 'Magic' || rarity === 'Rare') {
-    return rawBase.replace(/^Superior\s+/i, '').trim()
+    cleaned = cleaned.replace(/^Superior\s+/i, '').trim()
   }
-  return rawBase
+  if (itemClass === 'Viscera') {
+    cleaned = cleaned.replace(/^(?:Lesser|Greater)\s+/i, '').trim()
+  }
+  return cleaned
 }
 
 function calcQ20Multiplier (
@@ -306,7 +310,7 @@ export function parseItemText (rawText: string): ParsedItem | null {
 
   const name = titleLines[0]
   const rawBaseType = titleLines.length > 1 ? titleLines[1] : titleLines[0]
-  const baseType = cleanBaseType(rawBaseType, rarity)
+  const baseType = cleanBaseType(rawBaseType, rarity, itemClass)
 
   let ilvl: number | null = null
   let quality: number | null = null
